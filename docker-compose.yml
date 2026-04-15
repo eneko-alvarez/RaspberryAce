@@ -44,7 +44,7 @@ services:
       # Options: 'all' (default, includes all enabled plugins), 'newera,elcano', etc. newera,elcano,misterchire,af1c1onados
       - AIO_PLUGINS=newera,elcano,misterchire,af1c1onados
       # Plugin playlist URLs (optional - uses defaults if not set)
-      # - NEWERA_PLAYLIST_URL=https://your-custom-url/playlist.m3u
+      # - NEWERA_PLAYLIST_URL=https://ipfs.io/ipns/k2k4r8oqlcjxsritt5mczkcn4mmvcmymbqw7113fz2flkrerfwfps004/data/listas/lista_iptv.m3u
       # - ELCANO_PLAYLIST_URL=https://your-custom-url/playlist.m3u
     depends_on:
       aceserve:
@@ -57,6 +57,67 @@ services:
       retries: 3
       start_period: 10s
 
+    networks:
+      - aceproxy-net
+
+  webplayer:
+    build:
+      context: ./webplayer
+      dockerfile: Dockerfile
+    container_name: webplayer
+    ports:
+      - "8890:8890"
+    environment:
+      - PROXY_HOST=httproxy
+      - PROXY_PORT=8888
+
+    depends_on:
+      httproxy:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - aceproxy-net
+
+  # ─── M3U Peer Checker ──────────────────────────────────────────────────────────
+  # Fetches /aio periodically, discards channels with no active peers,
+  # and serves the clean playlist at http://<host>:8889/aio_filtered
+  peer-checker:
+    build:
+      context: ./peer-checker
+      dockerfile: Dockerfile
+    container_name: peer-checker
+    ports:
+      - "8889:8889"    # Filtered playlist + dashboard
+    environment:
+      # Internal docker hostname of the httproxy service
+      - PROXY_HOST=httproxy
+      - PROXY_PORT=8888
+ 
+      # How often (seconds) to re-scan all channels automatically
+      # 300 = 5 min  |  600 = 10 min  |  3600 = 1 hour
+      - CHECK_INTERVAL=300
+ 
+      # Minimum number of total_peers to consider a channel "live"
+      - MIN_PEERS=1
+ 
+      # How many peer-checks to run in parallel (higher = faster but more load)
+      - CONCURRENCY=20
+ 
+      # Seconds to wait for a single /statplugin response before giving up
+      - PEER_TIMEOUT=12
+ 
+      # Path on httproxy that returns the full AIO playlist
+      - SOURCE_PATH=/aio
+    depends_on:
+      httproxy:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8889/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - aceproxy-net
 

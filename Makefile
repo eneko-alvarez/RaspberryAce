@@ -13,7 +13,7 @@ restart:
 	@echo "🔄 AceStream stack reiniciado"
 
 update-channels:
-	docker compose restart httpaceproxy
+	docker compose restart httproxy
 	@echo "🔄 Proxy reiniciado (IDs refrescados)"
 
 status:

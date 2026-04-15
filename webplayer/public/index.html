@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AceStream TV</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --surface2: #1c1c27;
+      --accent: #5b5ef4;
+      --accent2: #7c3aed;
+      --text: #f0f0f8;
+      --text2: #8888aa;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+    /* ── Header ── */
+    header { background: var(--surface); padding: 14px 20px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #ffffff0f; }
+    header h1 { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space: nowrap; }
+    #search { flex: 1; max-width: 400px; background: var(--surface2); border: 1px solid #ffffff12; border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 14px; outline: none; transition: border-color .2s; }
+    #search:focus { border-color: var(--accent); }
+    #search::placeholder { color: var(--text2); }
+    #channel-count { font-size: 12px; color: var(--text2); white-space: nowrap; margin-left: auto; }
+
+    /* ── Layout ── */
+    #app { display: flex; height: calc(100vh - 57px); }
+
+    /* ── Sidebar ── */
+    #sidebar { width: 260px; min-width: 260px; overflow-y: auto; background: var(--surface); border-right: 1px solid #ffffff08; display: flex; flex-direction: column; }
+    #group-list { list-style: none; padding: 8px 0; }
+    #group-list li { padding: 10px 18px; cursor: pointer; font-size: 13px; color: var(--text2); border-left: 3px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #group-list li:hover { color: var(--text); background: var(--surface2); }
+    #group-list li.active { color: var(--text); border-left-color: var(--accent); background: var(--surface2); }
+
+    /* ── Main ── */
+    #main { flex: 1; overflow-y: auto; padding: 24px; }
+
+    /* ── Player overlay ── */
+    #player-overlay { display: none; position: fixed; inset: 0; background: #000000ee; z-index: 200; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    #player-overlay.open { display: flex; }
+    #player-wrap { width: 100%; max-width: 900px; }
+    #player-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    #player-logo { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; background: var(--surface2); }
+    #player-title { font-size: 16px; font-weight: 600; flex: 1; }
+    #player-status { font-size: 12px; color: var(--text2); }
+    #close-btn { background: var(--surface2); border: none; color: var(--text); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+    #close-btn:hover { background: #e50914; }
+    video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: var(--radius); display: block; }
+
+    /* ── Group title ── */
+    .group-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid #ffffff0a; }
+
+    /* ── Channel grid ── */
+    .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 32px; }
+    .channel-card { background: var(--surface); border: 1px solid #ffffff08; border-radius: var(--radius); padding: 16px 12px; cursor: pointer; transition: all .2s; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+    .channel-card:hover { background: var(--surface2); border-color: var(--accent); transform: translateY(-2px); }
+    .channel-card:active { transform: translateY(0); }
+    .ch-logo { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; }
+    .ch-logo-placeholder { width: 56px; height: 56px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .ch-name { font-size: 11px; color: var(--text2); line-height: 1.3; word-break: break-word; }
+
+    /* ── States ── */
+    #loading-state, #error-state { padding: 60px 20px; text-align: center; color: var(--text2); }
+    .spinner { width: 36px; height: 36px; border: 3px solid #ffffff15; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Mobile ── */
+    @media (max-width: 640px) {
+      #sidebar { display: none; }
+      #sidebar.open { display: flex; position: fixed; inset: 57px 0 0 0; z-index: 150; width: 100%; }
+      #menu-btn { display: flex; }
+      #main { padding: 16px; }
+      .channel-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+      #player-overlay { padding: 10px; }
+    }
+    @media (min-width: 641px) { #menu-btn { display: none; } }
+    #menu-btn { background: var(--surface2); border: none; color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 18px; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #ffffff20; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <button id="menu-btn" onclick="toggleSidebar()">☰</button>
+  <h1>📡 AceStream TV</h1>
+  <input id="search" type="search" placeholder="Buscar canal…" oninput="onSearch(this.value)">
+  <span id="channel-count"></span>
+</header>
+
+<div id="app">
+  <div id="sidebar">
+    <ul id="group-list"></ul>
+  </div>
+  <div id="main">
+    <div id="loading-state"><div class="spinner"></div>Cargando canales…</div>
+    <div id="error-state" style="display:none">❌ Error cargando canales.<br><small id="error-msg"></small></div>
+    <div id="content" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Player overlay -->
+<div id="player-overlay">
+  <div id="player-wrap">
+    <div id="player-header">
+      <img id="player-logo" src="" alt="" onerror="this.style.display='none'">
+      <div id="player-title"></div>
+      <div id="player-status"></div>
+      <button id="close-btn" onclick="closePlayer()">✕</button>
+    </div>
+    <video id="video" controls autoplay playsinline></video>
+  </div>
+</div>
+
+<script>
+  let allChannels = [];
+  let grouped = {};
+  let currentGroup = '__all__';
+  let hls = null;
+  const sidebarEl = document.getElementById('sidebar');
+
+  function toggleSidebar() { sidebarEl.classList.toggle('open'); }
+
+  async function loadChannels() {
+    try {
+      const res = await fetch('/api/channels');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      allChannels = data.channels;
+      grouped = data.grouped;
+      document.getElementById('channel-count').textContent = `${data.total} canales`;
+      renderGroups();
+      renderGrid('__all__', allChannels);
+      document.getElementById('loading-state').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+    } catch(e) {
+      document.getElementById('loading-state').style.display = 'none';
+      document.getElementById('error-state').style.display = 'block';
+      document.getElementById('error-msg').textContent = e.message;
+    }
+  }
+
+  function renderGroups() {
+    const ul = document.getElementById('group-list');
+    const groups = Object.keys(grouped).sort();
+    ul.innerHTML = `<li class="active" onclick="selectGroup('__all__', this)">🎬 Todos</li>`
+      + groups.map(g => `<li onclick="selectGroup('${escHtml(g)}', this)">${escHtml(g)} <span style="color:#555;font-size:11px">(${grouped[g].length})</span></li>`).join('');
+  }
+
+  function selectGroup(group, el) {
+    currentGroup = group;
+    document.querySelectorAll('#group-list li').forEach(l => l.classList.remove('active'));
+    el.classList.add('active');
+    if (window.innerWidth <= 640) sidebarEl.classList.remove('open');
+    const channels = group === '__all__' ? allChannels : grouped[group] || [];
+    renderGrid(group, channels);
+  }
+
+  function renderGrid(group, channels) {
+    const content = document.getElementById('content');
+    if (!channels.length) { content.innerHTML = '<div style="color:var(--text2);padding:40px">Sin canales</div>'; return; }
+
+    if (group === '__all__') {
+      // Render by groups
+      const groups = Object.keys(grouped).sort();
+      content.innerHTML = groups.map(g => `
+        <div>
+          <div class="group-title">${escHtml(g)}</div>
+          <div class="channel-grid">${grouped[g].map(ch => cardHtml(ch)).join('')}</div>
+        </div>`).join('');
+    } else {
+      content.innerHTML = `<div class="group-title">${escHtml(group)}</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
+    }
+  }
+
+  function cardHtml(ch) {
+    const logo = ch.logo
+      ? `<img class="ch-logo" src="${escHtml(ch.logo)}" alt="" onerror="this.outerHTML='<div class=ch-logo-placeholder>📺</div>'">`
+      : `<div class="ch-logo-placeholder">📺</div>`;
+    return `<div class="channel-card" onclick='playChannel(${JSON.stringify(JSON.stringify(ch))})'>
+      ${logo}
+      <div class="ch-name">${escHtml(ch.name)}</div>
+    </div>`;
+  }
+
+  function onSearch(q) {
+    const filtered = allChannels.filter(ch => ch.name.toLowerCase().includes(q.toLowerCase()));
+    document.getElementById('channel-count').textContent = `${filtered.length} canales`;
+    if (!q) { renderGrid(currentGroup, currentGroup === '__all__' ? allChannels : grouped[currentGroup] || []); return; }
+    const content = document.getElementById('content');
+    content.innerHTML = `<div class="group-title">Resultados: "${escHtml(q)}"</div><div class="channel-grid">${filtered.map(ch => cardHtml(ch)).join('')}</div>`;
+  }
+
+  function playChannel(chJson) {
+    const ch = JSON.parse(chJson);
+    const overlay = document.getElementById('player-overlay');
+    overlay.classList.add('open');
+    document.getElementById('player-title').textContent = ch.name;
+    document.getElementById('player-status').textContent = '⏳ Iniciando…';
+    const logoEl = document.getElementById('player-logo');
+    if (ch.logo) { logoEl.src = ch.logo; logoEl.style.display = ''; }
+    else logoEl.style.display = 'none';
+
+    const hlsUrl = `/stream/${encodeURIComponent(ch.streamId)}/index.m3u8`;
+    const video = document.getElementById('video');
+    if (hls) { hls.destroy(); hls = null; }
+
+    if (Hls.isSupported()) {
+      hls = new Hls({ lowLatencyMode: true });
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play(); document.getElementById('player-status').textContent = '▶ En directo'; });
+      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) document.getElementById('player-status').textContent = '❌ ' + d.details; });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = hlsUrl; video.play();
+    }
+  }
+
+  function closePlayer() {
+    document.getElementById('player-overlay').classList.remove('open');
+    if (hls) { hls.destroy(); hls = null; }
+    document.getElementById('video').src = '';
+  }
+
+  document.getElementById('player-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closePlayer(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePlayer(); });
+
+  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+  loadChannels();
+</script>
+</body>
+</html>
