@@ -20,11 +20,15 @@ services:
       # - 74.115.172.133
       - 1.1.1.1
       - 1.0.0.1
+  
   httproxy:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    image: jopsis/httpaceproxy:latest
+    build:
+      context: ./httproxy       # ← la carpeta del submodule
+      dockerfile: Dockerfile
+      network: host
     container_name: httpaceproxy
     ports:
       - "8888:8888"    # HTTPAceProxy web interface
