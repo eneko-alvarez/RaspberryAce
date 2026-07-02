@@ -52,6 +52,14 @@
     #close-btn:hover { background: #e50914; }
     #player-shell { position: relative; background: #000; border-radius: var(--radius); overflow: hidden; }
     video { width: 100%; aspect-ratio: 16/9; background: #000; display: block; }
+    #stream-loader { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; padding: 24px; background: #000000d9; }
+    .stream-loader-inner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 999px; background: #00000066; }
+    .stream-spinner { width: 34px; height: 34px; border: 3px solid #ffffff24; border-top-color: #e50914; border-radius: 50%; animation: spin .75s linear infinite; }
+    #loader-percent { min-width: 54px; font-size: 24px; font-weight: 800; color: var(--text); text-align: left; }
+    #stream-error { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; padding: 24px; background: #000000d9; text-align: center; }
+    .stream-error-inner { max-width: 360px; padding: 18px 20px; border-radius: 10px; background: #16090bcc; border: 1px solid #e5091455; }
+    .stream-error-title { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+    #stream-error-msg { font-size: 12px; line-height: 1.4; color: var(--text2); }
     #live-controls { position: absolute; left: 0; right: 0; bottom: 0; min-height: 58px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; background: linear-gradient(180deg, transparent, #000000d9); opacity: 1; transition: opacity .25s ease; }
     #player-shell.controls-hidden #live-controls { opacity: 0; pointer-events: none; }
     .live-badge { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border-radius: 999px; background: #e509141f; color: #fff; border: 1px solid #e5091466; font-size: 11px; font-weight: 800; letter-spacing: .7px; white-space: nowrap; }
@@ -134,6 +142,18 @@
     </div>
     <div id="player-shell">
       <video id="video" autoplay playsinline></video>
+      <div id="stream-loader" hidden>
+        <div class="stream-loader-inner">
+          <div class="stream-spinner"></div>
+          <div id="loader-percent">0%</div>
+        </div>
+      </div>
+      <div id="stream-error" hidden>
+        <div class="stream-error-inner">
+          <div class="stream-error-title">No se pudo cargar el directo</div>
+          <div id="stream-error-msg">Prueba de nuevo en unos segundos.</div>
+        </div>
+      </div>
       <div id="live-controls">
         <div id="live-badge" class="live-badge"><span class="live-dot"></span><span id="live-label">EN DIRECTO</span></div>
         <button class="player-btn" type="button" onclick="seekBack10()" aria-label="Retroceder 10 segundos">↶ 10s</button>
@@ -153,9 +173,16 @@
   let hls = null;
   let liveStateTimer = null;
   let controlsHideTimer = null;
+  let streamLoadTimer = null;
+  let streamLoadProgress = 0;
+  let streamLoadStartedAt = 0;
+  let activeChannel = null;
+  let userClosedPlayer = false;
   const sidebarEl = document.getElementById('sidebar');
   const videoEl = document.getElementById('video');
   const playerShellEl = document.getElementById('player-shell');
+  const streamLoaderEl = document.getElementById('stream-loader');
+  const streamErrorEl = document.getElementById('stream-error');
   const FAVORITES_KEY = 'raspberryace:favorites:v1';
   let favoriteKeys = loadFavoriteKeys();
 
@@ -292,6 +319,8 @@
 
   function playChannel(chJson) {
     const ch = chJson;
+    activeChannel = ch;
+    userClosedPlayer = false;
     const overlay = document.getElementById('player-overlay');
     overlay.classList.add('open');
     document.getElementById('player-title').textContent = ch.name;
@@ -305,20 +334,36 @@
     videoEl.removeAttribute('controls');
     videoEl.muted = false;
     updateMuteButton();
+    hideStreamError();
+    showStreamLoader();
     startLiveStateTimer();
     showPlayerControls();
 
     if (Hls.isSupported()) {
       hls = new Hls({ lowLatencyMode: true });
+      hls.on(Hls.Events.MANIFEST_LOADING, () => updateStreamLoader(20));
+      hls.on(Hls.Events.MANIFEST_LOADED, () => updateStreamLoader(45));
+      hls.on(Hls.Events.FRAG_LOADING, () => updateStreamLoader(72));
+      hls.on(Hls.Events.FRAG_LOADED, () => updateStreamLoader(84));
+      hls.on(Hls.Events.FRAG_BUFFERED, () => updateStreamLoader(92));
       hls.loadSource(hlsUrl);
       hls.attachMedia(videoEl);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        updateStreamLoader(65);
         goLive();
         videoEl.play();
         document.getElementById('player-status').textContent = '● En directo';
       });
-      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) document.getElementById('player-status').textContent = '❌ ' + d.details; });
+      hls.on(Hls.Events.ERROR, (_, d) => {
+        if (!activeChannel || activeChannel.streamId !== ch.streamId) return;
+        if (d.fatal) {
+          hideStreamLoader(true);
+          showStreamError('El canal no ha respondido o no se ha podido abrir el manifiesto.');
+          document.getElementById('player-status').textContent = '❌ ' + d.details;
+        }
+      });
     } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+      updateStreamLoader(20);
       videoEl.src = hlsUrl;
       goLive();
       videoEl.play();
@@ -326,10 +371,14 @@
   }
 
   function closePlayer() {
+    userClosedPlayer = true;
+    activeChannel = null;
     document.getElementById('player-overlay').classList.remove('open');
     if (hls) { hls.destroy(); hls = null; }
     stopLiveStateTimer();
     stopControlsHideTimer();
+    hideStreamLoader(true);
+    hideStreamError();
     playerShellEl.classList.remove('controls-hidden');
     videoEl.pause();
     videoEl.removeAttribute('src');
@@ -411,6 +460,64 @@
     controlsHideTimer = null;
   }
 
+  function showStreamLoader() {
+    streamLoadProgress = 0;
+    streamLoadStartedAt = Date.now();
+    streamLoaderEl.hidden = false;
+    updateStreamLoader(8);
+    stopStreamLoadTimer();
+    streamLoadTimer = setInterval(() => {
+      if (streamLoaderEl.hidden) return;
+      const elapsed = Math.floor((Date.now() - streamLoadStartedAt) / 1000);
+      if (elapsed >= 12 && streamLoadProgress < 92) {
+        updateStreamLoader(streamLoadProgress);
+      }
+    }, 1000);
+  }
+
+  function updateStreamLoader(percent) {
+    streamLoadProgress = Math.max(streamLoadProgress, Math.min(100, percent));
+    document.getElementById('loader-percent').textContent = `${streamLoadProgress}%`;
+  }
+
+  function hideStreamLoader(immediate = false) {
+    stopStreamLoadTimer();
+    if (immediate) {
+      streamLoaderEl.hidden = true;
+      return;
+    }
+    updateStreamLoader(100);
+    setTimeout(() => { streamLoaderEl.hidden = true; }, 250);
+  }
+
+  function stopStreamLoadTimer() {
+    if (!streamLoadTimer) return;
+    clearInterval(streamLoadTimer);
+    streamLoadTimer = null;
+  }
+
+  function showStreamError(message) {
+    stopStreamLoadTimer();
+    streamErrorEl.hidden = false;
+    document.getElementById('stream-error-msg').textContent = message;
+    showPlayerControls();
+  }
+
+  function hideStreamError() {
+    streamErrorEl.hidden = true;
+  }
+
+  function reloadActiveChannel() {
+    if (userClosedPlayer || !activeChannel) return;
+    document.getElementById('player-status').textContent = '⏳ Reconectando...';
+    hideStreamError();
+    showStreamLoader();
+    const channel = activeChannel;
+    setTimeout(() => {
+      if (!userClosedPlayer && activeChannel) playChannel(channel);
+    }, 600);
+  }
+
   document.getElementById('player-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closePlayer(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePlayer(); });
   playerShellEl.addEventListener('mousemove', showPlayerControls);
@@ -418,6 +525,18 @@
   playerShellEl.addEventListener('click', showPlayerControls);
   videoEl.addEventListener('timeupdate', updateLiveState);
   videoEl.addEventListener('volumechange', updateMuteButton);
+  videoEl.addEventListener('loadedmetadata', () => updateStreamLoader(68));
+  videoEl.addEventListener('canplay', () => updateStreamLoader(95));
+  videoEl.addEventListener('playing', () => hideStreamLoader());
+  videoEl.addEventListener('ended', reloadActiveChannel);
+  videoEl.addEventListener('error', () => {
+    if (!activeChannel) return;
+    hideStreamLoader(true);
+    showStreamError('El reproductor no ha podido abrir este directo.');
+  });
+  videoEl.addEventListener('waiting', () => {
+    if (!streamLoaderEl.hidden) updateStreamLoader(streamLoadProgress);
+  });
 
   function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function jsArg(value) { return escHtml(JSON.stringify(value)); }
