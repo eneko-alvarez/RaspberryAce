@@ -1,0 +1,18 @@
+services:
+  webplayer:
+    build:
+      context: ./webplayer
+      dockerfile: Dockerfile
+    container_name: webplayer
+    ports:
+      - "8890:8890"
+    environment:
+      - PROXY_HOST=${PROXY_HOST:-192.168.1.125}
+      - PROXY_PORT=${PROXY_PORT:-8888}
+    restart: unless-stopped
+    networks:
+      - aceproxy-net
+
+networks:
+  aceproxy-net:
+    driver: bridge
