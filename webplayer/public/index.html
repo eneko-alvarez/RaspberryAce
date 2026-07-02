@@ -40,6 +40,10 @@
     #group-list li { padding: 10px 18px; cursor: pointer; font-size: 13px; color: var(--text2); border-left: 3px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #group-list li:hover { color: var(--text); background: var(--surface2); }
     #group-list li.active { color: var(--text); border-left-color: var(--accent); background: var(--surface2); }
+    #group-list li.back { color: var(--text); font-weight: 700; }
+    #group-list li.section-label { cursor: default; padding: 14px 18px 6px; font-size: 11px; font-weight: 800; color: #5f5f82; text-transform: uppercase; letter-spacing: 1px; border-left-color: transparent; }
+    #group-list li.section-label:hover { background: transparent; color: #5f5f82; }
+    #group-list li.subgroup { padding-left: 30px; }
 
     /* ── Main ── */
     #main { flex: 1; overflow-y: auto; padding: 24px; }
@@ -180,8 +184,9 @@
 <script>
   let allChannels = [];
   let grouped = {};
+  let subgrouped = {};
   let customChannels = [];
-  let currentGroup = '__favorites__';
+  let currentView = { type: 'favorites', group: null, subgroup: null };
   let hls = null;
   let liveStateTimer = null;
   let controlsHideTimer = null;
@@ -209,6 +214,7 @@
 
       allChannels = data.channels;
       grouped = data.grouped;
+      subgrouped = data.subgrouped || {};
       syncCustomGroup();
       document.getElementById('channel-count').textContent = `${data.total} canales`;
       renderGroups();
@@ -224,53 +230,76 @@
 
   function renderGroups() {
     const ul = document.getElementById('group-list');
-    const groups = Object.keys(grouped).sort();
     const favoritesCount = getFavoriteChannels().length;
-    ul.innerHTML = groupLi('__favorites__', `♥ Favoritos <span style="color:#555;font-size:11px">(${favoritesCount})</span>`)
-      + groupLi('__all__', '🎬 Todos')
-      + groups.map(g => groupLi(g, `${escHtml(g)} <span style="color:#555;font-size:11px">(${grouped[g].length})</span>`)).join('');
+
+    if (currentView.group && grouped[currentView.group]) {
+      const group = currentView.group;
+      const subgroups = Object.keys(subgrouped[group] || {});
+      ul.innerHTML = viewLi('all', null, null, '← Categorías', 'back')
+        + viewLi('group', group, null, `${escHtml(group)} <span style="color:#555;font-size:11px">(${grouped[group].length})</span>`)
+        + '<li class="section-label">Subgrupos</li>'
+        + subgroups.map(s => viewLi('subgroup', group, s, `${escHtml(s)} <span style="color:#555;font-size:11px">(${subgrouped[group][s].length})</span>`, 'subgroup')).join('');
+      return;
+    }
+
+    const groups = Object.keys(grouped);
+    ul.innerHTML = viewLi('favorites', null, null, `♥ Favoritos <span style="color:#555;font-size:11px">(${favoritesCount})</span>`)
+      + viewLi('all', null, null, '🎬 Todos')
+      + groups.map(g => viewLi('group', g, null, `${escHtml(g)} <span style="color:#555;font-size:11px">(${grouped[g].length})</span>`)).join('');
   }
 
-  function groupLi(group, label) {
-    const active = group === currentGroup ? ' class="active"' : '';
-    return `<li${active} onclick="selectGroup(${jsArg(group)}, this)">${label}</li>`;
+  function viewLi(type, group, subgroup, label, extraClass = '') {
+    const active = isCurrentView(type, group, subgroup) ? ' active' : '';
+    const klass = `${active}${extraClass ? ' ' + extraClass : ''}`.trim();
+    return `<li${klass ? ` class="${klass}"` : ''} onclick="selectView(${jsArg(type)}, ${jsArg(group)}, ${jsArg(subgroup)}, this)">${label}</li>`;
   }
 
-  function selectGroup(group, el) {
-    currentGroup = group;
+  function isCurrentView(type, group, subgroup) {
+    return currentView.type === type && currentView.group === group && currentView.subgroup === subgroup;
+  }
+
+  function selectView(type, group, subgroup, el) {
+    currentView = { type, group, subgroup };
     document.querySelectorAll('#group-list li').forEach(l => l.classList.remove('active'));
-    el.classList.add('active');
+    if (el) el.classList.add('active');
     if (window.innerWidth <= 640) sidebarEl.classList.remove('open');
+    renderGroups();
     renderCurrentView();
   }
 
   function renderCurrentView() {
     const q = document.getElementById('search').value.trim();
     if (q) { onSearch(q); return; }
-    const channels = currentGroup === '__favorites__'
-      ? getFavoriteChannels()
-      : currentGroup === '__all__'
-        ? allChannels
-        : grouped[currentGroup] || [];
-    renderGrid(currentGroup, channels);
+    const channels = getCurrentChannels();
+    renderGrid(currentView, channels);
   }
 
-  function renderGrid(group, channels) {
+  function getCurrentChannels() {
+    if (currentView.type === 'favorites') return getFavoriteChannels();
+    if (currentView.type === 'all') return allChannels;
+    if (currentView.type === 'subgroup') return subgrouped[currentView.group]?.[currentView.subgroup] || [];
+    if (currentView.type === 'group') return grouped[currentView.group] || [];
+    return allChannels;
+  }
+
+  function renderGrid(view, channels) {
     const content = document.getElementById('content');
     if (!channels.length) { content.innerHTML = '<div style="color:var(--text2);padding:40px">Sin canales</div>'; return; }
 
-    if (group === '__all__') {
+    if (view.type === 'all') {
       // Render by groups
-      const groups = Object.keys(grouped).sort();
+      const groups = Object.keys(grouped);
       content.innerHTML = groups.map(g => `
         <div>
           <div class="group-title">${escHtml(g)}</div>
           <div class="channel-grid">${grouped[g].map(ch => cardHtml(ch)).join('')}</div>
         </div>`).join('');
-    } else if (group === '__favorites__') {
+    } else if (view.type === 'favorites') {
       content.innerHTML = `<div class="group-title">Favoritos</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
+    } else if (view.type === 'subgroup') {
+      content.innerHTML = `<div class="group-title">${escHtml(view.group)} / ${escHtml(view.subgroup)}</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
     } else {
-      content.innerHTML = `<div class="group-title">${escHtml(group)}</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
+      content.innerHTML = `<div class="group-title">${escHtml(view.group)}</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
     }
   }
 
@@ -323,7 +352,7 @@
       if (!existing) customChannels.unshift(ch);
       syncCustomGroup();
       input.value = '';
-      currentGroup = 'Custom';
+      currentView = { type: 'group', group: 'Custom', subgroup: null };
       renderGroups();
       renderCurrentView();
       document.getElementById('channel-count').textContent = `${allChannels.length} canales`;
@@ -338,8 +367,13 @@
   function syncCustomGroup() {
     const regularChannels = allChannels.filter(ch => ch.group !== 'Custom' || !ch.contentId);
     allChannels = [...customChannels, ...regularChannels];
-    if (customChannels.length) grouped.Custom = customChannels;
-    else delete grouped.Custom;
+    if (customChannels.length) {
+      grouped.Custom = customChannels;
+      subgrouped.Custom = { Manual: customChannels };
+    } else {
+      delete grouped.Custom;
+      delete subgrouped.Custom;
+    }
   }
 
   function looksLikeAceInput(value) {
@@ -350,7 +384,16 @@
   function loadFavoriteKeys() {
     try {
       const parsed = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
-      return new Set(Array.isArray(parsed) ? parsed : []);
+      const keys = new Set();
+      if (Array.isArray(parsed)) {
+        parsed.forEach(key => {
+          const value = String(key || '');
+          if (!value) return;
+          keys.add(value);
+          keys.add(canonicalFavoriteName(value));
+        });
+      }
+      return keys;
     } catch {
       return new Set();
     }
@@ -360,12 +403,34 @@
     localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favoriteKeys]));
   }
 
-  function favoriteKey(ch) {
-    return String(ch.name || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+  function channelFavoriteKeys(ch) {
+    const keys = new Set();
+    if (ch.contentId) keys.add(`content:${ch.contentId}`);
+    if (ch.tvgId) keys.add(`tvg:${String(ch.tvgId).trim().toLowerCase()}`);
+    if (ch.name) {
+      keys.add(canonicalFavoriteName(ch.name));
+      keys.add(String(ch.name).normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase());
+    }
+    return [...keys].filter(Boolean);
+  }
+
+  function canonicalFavoriteName(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\([^)]*\b(?:backup|reserva|opcion|option|source|newera|elcano|af1c1onados|misterchire|acepl)\b[^)]*\)/g, ' ')
+      .replace(/\[[^\]]*\b(?:backup|reserva|opcion|option|source|newera|elcano|af1c1onados|misterchire|acepl)\b[^\]]*\]/g, ' ')
+      .replace(/\b(?:uhd|fhd|qhd|hd|sd|4k|8k|1080p|720p|50fps|60fps)\b/g, ' ')
+      .replace(/\b(?:backup|reserva|opcion|option|source|mirror|ace|acestream)\s*\d*\b/g, ' ')
+      .replace(/\s+\(\d+\)$/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   function isFavorite(ch) {
-    return favoriteKeys.has(favoriteKey(ch));
+    return channelFavoriteKeys(ch).some(key => favoriteKeys.has(key));
   }
 
   function getFavoriteChannels() {
@@ -375,9 +440,12 @@
   function toggleFavorite(event, chJson) {
     event.stopPropagation();
     const ch = chJson;
-    const key = favoriteKey(ch);
-    if (favoriteKeys.has(key)) favoriteKeys.delete(key);
-    else favoriteKeys.add(key);
+    const keys = channelFavoriteKeys(ch);
+    const favorite = keys.some(key => favoriteKeys.has(key));
+    keys.forEach(key => {
+      if (favorite) favoriteKeys.delete(key);
+      else favoriteKeys.add(key);
+    });
     saveFavoriteKeys();
     renderGroups();
     renderCurrentView();

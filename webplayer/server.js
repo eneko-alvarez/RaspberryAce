@@ -9,6 +9,118 @@ const PROXY_HOST = process.env.PROXY_HOST || 'httproxy';
 const PROXY_PORT = process.env.PROXY_PORT || '8888';
 const HLS_DIR = '/tmp/hls';
 
+const SUBGROUP_RULES = [
+  { group: 'Deportes', label: 'DAZN', patterns: ['dazn'] },
+  { group: 'Deportes', label: 'Movistar', patterns: ['movistar', 'vamos', 'm\\+'] },
+  { group: 'Deportes', label: 'LaLiga', patterns: ['laliga', 'la liga', 'hypermotion', 'liga ea'] },
+  { group: 'Deportes', label: 'Champions', patterns: ['champions', 'liga de campeones', 'uefa'] },
+  { group: 'Deportes', label: 'Mundial', patterns: ['mundial', 'world cup', 'copa mundial'] },
+  { group: 'Deportes', label: 'Copa del Rey', patterns: ['copa del rey'] },
+  { group: 'Deportes', label: 'Primera RFEF', patterns: ['primera rfef', '1 rfef'] },
+  { group: 'Deportes', label: 'Formula 1', patterns: ['f1', 'formula 1', 'formula uno'] },
+  { group: 'Deportes', label: 'MotoGP', patterns: ['motogp', 'moto gp'] },
+  { group: 'Deportes', label: 'Tenis', patterns: ['tenis', 'tennis'] },
+  { group: 'Deportes', label: 'Basket', patterns: ['basket', 'baloncesto', 'nba', 'acb', 'euroleague'] },
+  { group: 'Deportes', label: 'Golf', patterns: ['golf'] },
+  { group: 'Deportes', label: 'UFC', patterns: ['ufc', 'mma'] },
+  { group: 'Deportes', label: 'Eurosport', patterns: ['eurosport'] },
+  { group: 'Deportes', label: 'ESPN', patterns: ['espn'] },
+  { group: 'Deportes', label: 'beIN Sports', patterns: ['bein'] },
+  { group: 'Deportes', label: 'Sky Sports', patterns: ['sky sport', 'sky sports'] },
+  { group: 'Deportes', label: 'BT Sport', patterns: ['bt sport', 'bt sports', 'tnt sports'] },
+  { group: 'Deportes', label: 'Sport TV', patterns: ['sport tv'] },
+  { group: 'Deportes', label: 'Viaplay', patterns: ['viaplay'] },
+  { group: 'Deportes', label: 'Eventos', patterns: ['evento', 'eventos', 'ppv', 'multi', 'directo'] },
+
+  { group: 'Cine y Series', label: 'Movistar', patterns: ['movistar', 'm\\+'] },
+  { group: 'Cine y Series', label: 'HBO', patterns: ['hbo'] },
+  { group: 'Cine y Series', label: 'AMC', patterns: ['amc'] },
+  { group: 'Cine y Series', label: 'AXN', patterns: ['axn'] },
+  { group: 'Cine y Series', label: 'TNT', patterns: ['tnt'] },
+  { group: 'Cine y Series', label: 'Warner', patterns: ['warner'] },
+  { group: 'Cine y Series', label: 'Paramount', patterns: ['paramount'] },
+  { group: 'Cine y Series', label: 'Comedia', patterns: ['comedy', 'comedia'] },
+  { group: 'Cine y Series', label: 'Series', patterns: ['series', 'serie'] },
+
+  { group: 'Infantil', label: 'Disney', patterns: ['disney'] },
+  { group: 'Infantil', label: 'Nickelodeon', patterns: ['nick', 'nickelodeon'] },
+  { group: 'Infantil', label: 'Cartoon Network', patterns: ['cartoon'] },
+  { group: 'Infantil', label: 'Clan', patterns: ['clan'] },
+  { group: 'Infantil', label: 'Boing', patterns: ['boing'] },
+
+  { group: 'Documentales', label: 'Discovery', patterns: ['discovery'] },
+  { group: 'Documentales', label: 'National Geographic', patterns: ['nat geo', 'national geographic'] },
+  { group: 'Documentales', label: 'Historia', patterns: ['history', 'historia'] },
+  { group: 'Documentales', label: 'Viajes', patterns: ['travel', 'viajar', 'viajes'] },
+
+  { group: 'Noticias', label: '24h', patterns: ['24h', '24 horas'] },
+  { group: 'Noticias', label: 'CNN', patterns: ['cnn'] },
+  { group: 'Noticias', label: 'Euronews', patterns: ['euronews'] },
+  { group: 'Noticias', label: 'BBC', patterns: ['bbc'] },
+
+  { group: 'Musica', label: 'MTV', patterns: ['mtv'] },
+  { group: 'Musica', label: 'VH1', patterns: ['vh1'] },
+  { group: 'Musica', label: 'Radio', patterns: ['radio'] },
+
+  { group: 'Regional', label: 'Andalucia', patterns: ['andalucia', 'canal sur'] },
+  { group: 'Regional', label: 'Catalunya', patterns: ['catalunya', 'cataluna', 'tv3', '3cat'] },
+  { group: 'Regional', label: 'Madrid', patterns: ['madrid', 'telemadrid'] },
+  { group: 'Regional', label: 'Galicia', patterns: ['galicia', 'tvg'] },
+  { group: 'Regional', label: 'Euskadi', patterns: ['euskadi', 'etb'] },
+  { group: 'Regional', label: 'Valencia', patterns: ['valencia', 'apunt', 'a punt'] },
+];
+
+const MAIN_GROUPS = new Set([
+  'deportes',
+  'generalistas',
+  'noticias',
+  'cine y series',
+  'infantil',
+  'documentales',
+  'musica',
+  'regional',
+  'internacional',
+  'adultos',
+  'religion',
+  'otros',
+]);
+
+const GENERIC_SUBGROUPS = new Set([
+  'sport',
+  'sports',
+  'deporte',
+  'deportes',
+  'movies',
+  'movie',
+  'cine',
+  'series',
+  'kids',
+  'infantil',
+  'regional',
+  'general',
+  'tv',
+  'canales',
+  'channels',
+  'otros',
+  'other',
+  'unknown',
+  'sin grupo',
+  'educational',
+  'entertaining',
+  'informational',
+  'documentaries',
+  'documentary',
+  'music',
+  'musica',
+  'fashion',
+  'amateur',
+  'acepl',
+  'newera',
+  'elcano',
+  'misterchire',
+  'af1c1onados',
+]);
+
 app.use(express.json());
 
 if (!fs.existsSync(HLS_DIR)) fs.mkdirSync(HLS_DIR, { recursive: true });
@@ -54,6 +166,7 @@ app.get('/api/channels', async (req, res) => {
       // Extract fields from #EXTINF
       const nameMatch = infLine.match(/,(.+)$/);
       const groupMatch = infLine.match(/group-title="([^"]*)"/);
+      const rawGroupMatch = infLine.match(/raw-group="([^"]*)"/);
       const logoMatch = infLine.match(/tvg-logo="([^"]*)"/);
       const tvgIdMatch = infLine.match(/tvg-id="([^"]*)"/);
 
@@ -68,24 +181,39 @@ app.get('/api/channels', async (req, res) => {
       // Replace internal docker hostname with the server's own proxy
       // The stream endpoint will fetch server-side, so we just store the original URL
       // but rewrite httproxy -> PROXY_HOST (already correct for server-side fetch)
+      const name = nameMatch[1].trim();
+      const group = groupMatch ? groupMatch[1] : 'Sin grupo';
+      const rawGroup = rawGroupMatch ? rawGroupMatch[1] : group;
+      const tvgId = tvgIdMatch ? tvgIdMatch[1] : null;
+      const contentId = extractContentId(url);
+      const subgroups = inferSubgroups(group, name, tvgId, rawGroup);
+
       channels.push({
         name: nameMatch[1].trim(),
-        group: groupMatch ? groupMatch[1] : 'Sin grupo',
+        group,
+        rawGroup,
+        subgroups,
         logo: logoMatch ? logoMatch[1] : null,
-        tvgId: tvgIdMatch ? tvgIdMatch[1] : null,
+        tvgId,
+        contentId,
         // Encode original internal URL for use with /stream/:id endpoint
         streamId: Buffer.from(url).toString('base64')
       });
     }
 
-    // Group channels
     const grouped = {};
+    const subgrouped = {};
     for (const ch of channels) {
       if (!grouped[ch.group]) grouped[ch.group] = [];
       grouped[ch.group].push(ch);
+      if (!subgrouped[ch.group]) subgrouped[ch.group] = {};
+      for (const subgroup of ch.subgroups) {
+        if (!subgrouped[ch.group][subgroup]) subgrouped[ch.group][subgroup] = [];
+        subgrouped[ch.group][subgroup].push(ch);
+      }
     }
 
-    res.json({ channels, grouped, total: channels.length });
+    res.json({ channels, grouped, subgrouped: orderSubgrouped(subgrouped), total: channels.length });
   } catch (e) {
     console.error(e);
     res.status(502).json({ error: e.message });
@@ -104,6 +232,8 @@ app.post('/api/custom-channel', (req, res) => {
   res.json({
     name: `Custom ${contentId.slice(0, 8)}`,
     group: 'Custom',
+    rawGroup: 'Manual',
+    subgroups: ['Manual'],
     logo: null,
     tvgId: null,
     contentId,
@@ -201,6 +331,124 @@ function normalizeAceContentId(input) {
 
   candidate = String(candidate).trim();
   return /^[a-fA-F0-9]{40}$/.test(candidate) ? candidate.toLowerCase() : null;
+}
+
+function extractContentId(url) {
+  const match = String(url || '').match(/\/(?:content_id|pid|infohash)\/([a-fA-F0-9]{40})\//);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function inferSubgroups(group, name, tvgId, rawGroup) {
+  const text = normalizeText(`${name || ''} ${tvgId || ''} ${rawGroup || ''}`);
+  const labels = [];
+
+  for (const rule of SUBGROUP_RULES) {
+    if (rule.group !== group) continue;
+    if (rule.patterns.some(pattern => new RegExp(`(^|[^a-z0-9])${pattern}([^a-z0-9]|$)`, 'i').test(text))) {
+      labels.push(rule.label);
+    }
+  }
+
+  labels.push(...rawGroupSubgroups(group, rawGroup));
+
+  if (!labels.length) labels.push('Otros');
+  return [...new Set(labels)];
+}
+
+function rawGroupSubgroups(group, rawGroup) {
+  const labels = [];
+  const parts = String(rawGroup || '')
+    .split(/\s*(?:,|\/|\||>|»|\s-\s)\s*/)
+    .map(cleanSubgroupLabel)
+    .filter(Boolean);
+
+  for (const label of parts) {
+    const normalized = normalizeText(label).trim();
+    if (!normalized || MAIN_GROUPS.has(normalized) || GENERIC_SUBGROUPS.has(normalized)) continue;
+    if (normalizeText(group) === normalized) continue;
+    if (matchesStaticSubgroup(group, label)) continue;
+    if (label.length < 3 || label.length > 28) continue;
+    labels.push(label);
+  }
+
+  return labels;
+}
+
+function cleanSubgroupLabel(value) {
+  const cleaned = String(value || '')
+    .replace(/^\d+(?:\.\d+)?\s*/, '')
+    .replace(/\.(?:w3u|m3u8?|json)$/i, '')
+    .replace(/[_#]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned || /https?:\/\//i.test(cleaned)) return null;
+  const normalized = normalizeText(cleaned);
+  const known = {
+    dazn: 'DAZN',
+    espn: 'ESPN',
+    ufc: 'UFC',
+    nba: 'NBA',
+    acb: 'ACB',
+    laliga: 'LaLiga',
+    'la liga': 'LaLiga',
+    motogp: 'MotoGP',
+    'moto gp': 'MotoGP',
+    mundial: 'Mundial',
+    eurosport: 'Eurosport',
+    'bein sport': 'beIN Sports',
+    'bein sports': 'beIN Sports',
+    'copa del rey': 'Copa del Rey',
+    'primera rfef': 'Primera RFEF',
+  };
+  if (normalized.includes('mundial')) return 'Mundial';
+  if (known[normalized]) return known[normalized];
+
+  return cleaned
+    .split(' ')
+    .map(word => word.length <= 3 && word === word.toUpperCase() ? word : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function matchesStaticSubgroup(group, label) {
+  const text = normalizeText(label);
+  return SUBGROUP_RULES.some(rule => {
+    if (rule.group !== group) return false;
+    return rule.patterns.some(pattern => new RegExp(`(^|[^a-z0-9])${pattern}([^a-z0-9]|$)`, 'i').test(text));
+  });
+}
+
+function orderSubgrouped(subgrouped) {
+  const ordered = {};
+  for (const [group, subgroups] of Object.entries(subgrouped)) {
+    const preferred = SUBGROUP_RULES
+      .filter(rule => rule.group === group)
+      .map(rule => rule.label);
+    const preferredSet = new Set(preferred);
+    const labels = Object.keys(subgroups);
+    const dynamicLabels = labels
+      .filter(label => !preferredSet.has(label) && label !== 'Otros')
+      .filter(label => subgroups[label].length >= 2)
+      .sort((a, b) => subgroups[b].length - subgroups[a].length || a.localeCompare(b, 'es'))
+      .slice(0, 24);
+    const sortedLabels = [
+      ...preferred.filter(label => subgroups[label]),
+      ...dynamicLabels,
+      ...labels.filter(label => label === 'Otros')
+    ];
+    ordered[group] = {};
+    for (const label of sortedLabels) {
+      ordered[group][label] = subgroups[label];
+    }
+  }
+  return ordered;
 }
 
 app.listen(8890, () => console.log('Webplayer on :8890'));
