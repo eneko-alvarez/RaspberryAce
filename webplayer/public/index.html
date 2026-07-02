@@ -22,9 +22,13 @@
     /* ── Header ── */
     header { background: var(--surface); padding: 14px 20px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #ffffff0f; }
     header h1 { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space: nowrap; }
-    #search { flex: 1; max-width: 400px; background: var(--surface2); border: 1px solid #ffffff12; border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 14px; outline: none; transition: border-color .2s; }
+    #search-wrap { flex: 1; max-width: 560px; display: flex; gap: 8px; min-width: 180px; }
+    #search { flex: 1; min-width: 0; background: var(--surface2); border: 1px solid #ffffff12; border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 14px; outline: none; transition: border-color .2s; }
     #search:focus { border-color: var(--accent); }
     #search::placeholder { color: var(--text2); }
+    #custom-btn { background: var(--accent); border: none; color: white; border-radius: 8px; padding: 0 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    #custom-btn:hover { filter: brightness(1.08); }
+    #custom-btn:disabled { opacity: .6; cursor: wait; }
     #channel-count { font-size: 12px; color: var(--text2); white-space: nowrap; margin-left: auto; }
 
     /* ── Layout ── */
@@ -75,6 +79,10 @@
       #sidebar.open { display: flex; position: fixed; inset: 57px 0 0 0; z-index: 150; width: 100%; }
       #menu-btn { display: flex; }
       #main { padding: 16px; }
+      header { gap: 10px; }
+      header h1 { font-size: 16px; }
+      #search-wrap { max-width: none; }
+      #custom-btn { padding: 0 10px; font-size: 12px; }
       .channel-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
       #player-overlay { padding: 10px; }
     }
@@ -90,7 +98,10 @@
 <header>
   <button id="menu-btn" onclick="toggleSidebar()">☰</button>
   <h1>📡 AceStream TV</h1>
-  <input id="search" type="search" placeholder="Buscar canal…" oninput="onSearch(this.value)">
+  <div id="search-wrap">
+    <input id="search" type="search" placeholder="Buscar canal o pegar AceStream ID…" oninput="onSearch(this.value)" onkeydown="onSearchKeydown(event)">
+    <button id="custom-btn" onclick="loadCustomChannel()">Cargar</button>
+  </div>
   <span id="channel-count"></span>
 </header>
 
@@ -121,6 +132,7 @@
 <script>
   let allChannels = [];
   let grouped = {};
+  let customChannels = [];
   let currentGroup = '__all__';
   let hls = null;
   const sidebarEl = document.getElementById('sidebar');
@@ -136,6 +148,7 @@
 
       allChannels = data.channels;
       grouped = data.grouped;
+      syncCustomGroup();
       document.getElementById('channel-count').textContent = `${data.total} canales`;
       renderGroups();
       renderGrid('__all__', allChannels);
@@ -151,8 +164,8 @@
   function renderGroups() {
     const ul = document.getElementById('group-list');
     const groups = Object.keys(grouped).sort();
-    ul.innerHTML = `<li class="active" onclick="selectGroup('__all__', this)">🎬 Todos</li>`
-      + groups.map(g => `<li onclick="selectGroup('${escHtml(g)}', this)">${escHtml(g)} <span style="color:#555;font-size:11px">(${grouped[g].length})</span></li>`).join('');
+    ul.innerHTML = `<li class="${currentGroup === '__all__' ? 'active' : ''}" onclick="selectGroup('__all__', this)">🎬 Todos</li>`
+      + groups.map(g => `<li class="${currentGroup === g ? 'active' : ''}" onclick='selectGroup(${escAttr(JSON.stringify(g))}, this)'>${escHtml(g)} <span style="color:#555;font-size:11px">(${grouped[g].length})</span></li>`).join('');
   }
 
   function selectGroup(group, el) {
@@ -199,6 +212,59 @@
     content.innerHTML = `<div class="group-title">Resultados: "${escHtml(q)}"</div><div class="channel-grid">${filtered.map(ch => cardHtml(ch)).join('')}</div>`;
   }
 
+  function onSearchKeydown(event) {
+    if (event.key === 'Enter' && looksLikeAceInput(event.currentTarget.value)) {
+      event.preventDefault();
+      loadCustomChannel();
+    }
+  }
+
+  async function loadCustomChannel() {
+    const input = document.getElementById('search');
+    const button = document.getElementById('custom-btn');
+    const rawId = input.value.trim();
+    if (!rawId) return;
+
+    button.disabled = true;
+    document.getElementById('channel-count').textContent = 'Cargando canal…';
+
+    try {
+      const res = await fetch('/api/custom-channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: rawId })
+      });
+      const ch = await res.json();
+      if (!res.ok || ch.error) throw new Error(ch.error || `HTTP ${res.status}`);
+
+      const existing = customChannels.find(c => c.contentId === ch.contentId);
+      if (!existing) customChannels.unshift(ch);
+      syncCustomGroup();
+      input.value = '';
+      currentGroup = 'Custom';
+      renderGroups();
+      renderGrid('Custom', grouped.Custom);
+      document.getElementById('channel-count').textContent = `${allChannels.length} canales`;
+      playChannel(JSON.stringify(ch));
+    } catch (e) {
+      document.getElementById('channel-count').textContent = e.message;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function syncCustomGroup() {
+    const regularChannels = allChannels.filter(ch => ch.group !== 'Custom' || !ch.contentId);
+    allChannels = [...customChannels, ...regularChannels];
+    if (customChannels.length) grouped.Custom = customChannels;
+    else delete grouped.Custom;
+  }
+
+  function looksLikeAceInput(value) {
+    const q = value.trim();
+    return /^[a-fA-F0-9]{40}$/.test(q) || /^acestream:\/\//i.test(q) || /(?:[?&](?:id|infohash)=|\/(?:content_id|pid|infohash)\/)/i.test(q);
+  }
+
   function playChannel(chJson) {
     const ch = JSON.parse(chJson);
     const overlay = document.getElementById('player-overlay');
@@ -234,6 +300,7 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePlayer(); });
 
   function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function escAttr(s) { return escHtml(s); }
 
   loadChannels();
 </script>

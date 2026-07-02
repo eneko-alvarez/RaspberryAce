@@ -9,6 +9,8 @@ const PROXY_HOST = process.env.PROXY_HOST || 'httproxy';
 const PROXY_PORT = process.env.PROXY_PORT || '8888';
 const HLS_DIR = '/tmp/hls';
 
+app.use(express.json());
+
 if (!fs.existsSync(HLS_DIR)) fs.mkdirSync(HLS_DIR, { recursive: true });
 
 const activeStreams = {};
@@ -90,6 +92,25 @@ app.get('/api/channels', async (req, res) => {
   }
 });
 
+app.post('/api/custom-channel', (req, res) => {
+  const rawInput = String(req.body?.id || '').trim();
+  const contentId = normalizeAceContentId(rawInput);
+
+  if (!contentId) {
+    return res.status(400).json({ error: 'Introduce un content id AceStream válido' });
+  }
+
+  const channelUrl = `http://${PROXY_HOST}:${PROXY_PORT}/content_id/${contentId}/stream.ts`;
+  res.json({
+    name: `Custom ${contentId.slice(0, 8)}`,
+    group: 'Custom',
+    logo: null,
+    tvgId: null,
+    contentId,
+    streamId: Buffer.from(channelUrl).toString('base64')
+  });
+});
+
 // Start or reuse HLS stream
 app.get('/stream/:channelId/index.m3u8', (req, res) => {
   const { channelId } = req.params;
@@ -156,6 +177,30 @@ function waitForFile(filePath, timeout) {
     };
     check();
   });
+}
+
+function normalizeAceContentId(input) {
+  if (!input) return null;
+
+  let candidate = input;
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol === 'acestream:') {
+      candidate = parsed.hostname || parsed.pathname.replace(/^\/+/, '');
+    } else if (parsed.searchParams.has('id')) {
+      candidate = parsed.searchParams.get('id');
+    } else if (parsed.searchParams.has('infohash')) {
+      candidate = parsed.searchParams.get('infohash');
+    } else {
+      const match = parsed.pathname.match(/\/(?:content_id|pid|infohash)\/([^/]+)/);
+      if (match) candidate = match[1];
+    }
+  } catch {
+    candidate = input.replace(/^acestream:\/\//i, '');
+  }
+
+  candidate = String(candidate).trim();
+  return /^[a-fA-F0-9]{40}$/.test(candidate) ? candidate.toLowerCase() : null;
 }
 
 app.listen(8890, () => console.log('Webplayer on :8890'));

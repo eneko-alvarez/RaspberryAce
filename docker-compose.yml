@@ -42,11 +42,12 @@ services:
       # Plugin control - Specify which plugins to enable
       # Options: 'all' (default), 'newera,acepl,stat', 'stat,statplugin', etc.
       # Available: newera, elcano, acepl, stat, statplugin, misterchire, af1c1onados, aio
-      - ENABLED_PLUGINS=newera,elcano,stat,statplugin,misterchire,af1c1onados,aio
+      - ENABLED_PLUGINS=all
+      - PLUGIN_LOAD_TIMEOUT=15
       # - ENABLED_PLUGINS=stat,statplugin,aio
       # AIO Plugin Filter - Which plugins to include in the AIO unified playlist
-      # Options: 'all' (default, includes all enabled plugins), 'newera,elcano', etc. newera,elcano,misterchire,af1c1onados
-      - AIO_PLUGINS=newera,elcano,misterchire,af1c1onados
+      # Options: 'all' (default, includes all enabled plugins), 'newera,elcano', etc.
+      - AIO_PLUGINS=all
       # Plugin playlist URLs (optional - uses defaults if not set)
       # - NEWERA_PLAYLIST_URL=https://ipfs.io/ipns/k2k4r8oqlcjxsritt5mczkcn4mmvcmymbqw7113fz2flkrerfwfps004/data/listas/lista_iptv.m3u
       # - ELCANO_PLAYLIST_URL=https://your-custom-url/playlist.m3u
@@ -59,7 +60,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 120s
 
     networks:
       - aceproxy-net
@@ -117,7 +118,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8889/status"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8889/status', timeout=5).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
