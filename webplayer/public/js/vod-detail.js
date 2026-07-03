@@ -48,7 +48,7 @@ function renderVodPage(item) {
       <div class="vod-meta">${vodMetaHtml(item)}${item.runtime ? `<span>${item.runtime} min</span>` : ''}${item.number_of_seasons ? `<span>${item.number_of_seasons} temporadas</span>` : ''}</div>
       <p class="vod-overview">${escHtml(item.overview || 'Sin sinopsis disponible.')}</p>
       <div class="vod-hero-provider">
-        ${item.media_type === 'tv' ? vodEpisodeSelectorHtml(item, initialSeason) : '<button class="vod-action" type="button" onclick="requestVodPlayback()">Cargar desde API</button>'}
+        ${item.media_type === 'tv' ? vodEpisodeSelectorHtml(item, initialSeason) : '<button class="vod-action" type="button" onclick="requestVodPlayback()">Reproducir</button>'}
       </div>
     </div>
   </section>
@@ -83,7 +83,7 @@ function vodEpisodeSelectorHtml(item, selectedSeason) {
     <select id="vod-episode-select" class="vod-select">
       <option value="">Cargando episodios…</option>
     </select>
-    <button class="vod-action" type="button" onclick="requestVodPlayback()">Cargar desde API</button>
+    <button class="vod-action" type="button" onclick="requestVodPlayback()">Reproducir</button>
   </div>`;
 }
 
