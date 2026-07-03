@@ -14,7 +14,7 @@ const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN || '';
 const TMDB_LANGUAGE = process.env.TMDB_LANGUAGE || 'es-ES';
 const TMDB_REGION = process.env.TMDB_REGION || 'ES';
 const TMDB_CACHE_TTL_MS = Number(process.env.TMDB_CACHE_TTL_MS || 1000 * 60 * 30);
-const VOD_PROVIDER_BASE_URL = process.env.VOD_PROVIDER_BASE_URL || '';
+const VOD_PROVIDER_BASE_URL = process.env.VOD_PROVIDER_BASE_URL || 'https://api.eneko.com';
 const VOD_PROVIDER_TOKEN = process.env.VOD_PROVIDER_TOKEN || '';
 
 const SUBGROUP_RULES = [
@@ -338,8 +338,7 @@ app.get('/api/vod/:mediaType/:id/playback', async (req, res) => {
     }, 1000 * 60 * 60 * 24);
 
     const item = normalizeMediaDetail(data, mediaType);
-    const playback = await getLicensedPlaybackOptions(item, { season, episode });
-    res.json(playback);
+    res.json(getLicensedPlaybackOptions(item, { season, episode }));
   } catch (e) {
     console.error(e);
     res.status(e.status || 502).json({ error: e.message });
@@ -354,13 +353,10 @@ app.get('/api/vod/:mediaType/:id', async (req, res) => {
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'TMDb id inválido' });
 
     const data = await tmdbFetch(`/${mediaType}/${id}`, {
-      append_to_response: 'external_ids,videos,credits,recommendations,similar'
+      append_to_response: 'external_ids,recommendations,similar'
     }, 1000 * 60 * 60 * 24);
 
     const detail = normalizeMediaDetail(data, mediaType);
-    detail.playback = mediaType === 'movie'
-      ? await getLicensedPlaybackOptions(detail)
-      : getPendingPlaybackOptions({ media_type: mediaType, tmdb_id: id });
     res.json(detail);
   } catch (e) {
     console.error(e);
@@ -420,6 +416,10 @@ app.get('/stream/:channelId/:segment', (req, res) => {
   const { channelId, segment } = req.params;
   if (activeStreams[channelId]) activeStreams[channelId].lastAccess = Date.now();
   res.sendFile(path.join(HLS_DIR, channelId, segment));
+});
+
+app.get('/vod/:mediaType/:id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'vod-detail.html'));
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -515,13 +515,6 @@ function normalizeMediaDetail(item, mediaType) {
       poster_path: season.poster_path || null
     })),
     genres: item.genres || [],
-    cast: (item.credits?.cast || []).slice(0, 10).map(person => ({
-      id: person.id,
-      name: person.name,
-      character: person.character,
-      profile_path: person.profile_path || null
-    })),
-    videos: selectPublicVideos(item.videos?.results || []),
     recommendations: normalizeMediaList(item.recommendations?.results).slice(0, 16),
     similar: normalizeMediaList(item.similar?.results).slice(0, 16)
   };
@@ -548,51 +541,22 @@ function normalizeTvSeason(item) {
   };
 }
 
-function getPendingPlaybackOptions(item, selection = {}) {
+function getLicensedPlaybackOptions(item, selection = {}) {
+  const embedUrl = vodEmbedUrl(item, selection);
   return {
     configured: Boolean(VOD_PROVIDER_BASE_URL),
-    providers: [],
     request: buildPlaybackRequest(item, selection),
-    message: VOD_PROVIDER_BASE_URL
-      ? 'Proveedor VOD configurado, pero no devolvió opciones reproducibles.'
-      : 'Proveedor VOD legal pendiente de configurar. Usando trailers y clips oficiales.'
-  };
-}
-
-async function getLicensedPlaybackOptions(item, selection = {}) {
-  const empty = getPendingPlaybackOptions(item, selection);
-  if (!VOD_PROVIDER_BASE_URL) return empty;
-
-  const url = vodProviderUrl('playback');
-  const request = buildPlaybackRequest(item, selection);
-  for (const [key, value] of Object.entries(request)) {
-    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
-  }
-
-  const headers = { accept: 'application/json' };
-  if (VOD_PROVIDER_TOKEN) headers.Authorization = `Bearer ${VOD_PROVIDER_TOKEN}`;
-
-  const res = await fetch(url, { headers });
-  if (!res.ok) {
-    console.warn(`VOD provider error ${res.status}: ${await res.text()}`);
-    return empty;
-  }
-
-  const data = await res.json();
-  const providers = Array.isArray(data.providers) ? data.providers : [];
-  return {
-    configured: true,
-    request,
-    providers: providers
-      .filter(provider => provider && (provider.embed_url || provider.stream_url))
-      .map(provider => ({
-        id: String(provider.id || provider.name || 'provider'),
-        name: String(provider.name || 'Proveedor VOD'),
-        type: provider.embed_url ? 'embed' : 'stream',
-        embed_url: provider.embed_url || null,
-        stream_url: provider.stream_url || null
-      })),
-    message: data.message || empty.message
+    providers: embedUrl ? [{
+      id: 'vod-api',
+      name: 'Reproducir',
+      type: 'embed',
+      url: embedUrl,
+      embed_url: embedUrl,
+      stream_url: null
+    }] : [],
+    message: embedUrl
+      ? 'Reproductor VOD legal disponible.'
+      : 'No se pudo construir la URL de reproducción VOD.'
   };
 }
 
@@ -617,26 +581,17 @@ function vodProviderUrl(pathname) {
   return new URL(pathname, base);
 }
 
-function selectPublicVideos(videos) {
-  const preferredTypes = ['Trailer', 'Teaser', 'Clip', 'Featurette'];
-  return videos
-    .filter(video => video.site === 'YouTube' && preferredTypes.includes(video.type))
-    .sort((a, b) => {
-      const officialDiff = Number(Boolean(b.official)) - Number(Boolean(a.official));
-      if (officialDiff) return officialDiff;
-      return preferredTypes.indexOf(a.type) - preferredTypes.indexOf(b.type);
-    })
-    .slice(0, 8)
-    .map(video => ({
-      id: video.id,
-      key: video.key,
-      name: video.name,
-      site: video.site,
-      type: video.type,
-      official: Boolean(video.official),
-      published_at: video.published_at || null,
-      embed_url: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.key)}?autoplay=1&rel=0`
-    }));
+function vodEmbedUrl(item, selection = {}) {
+  if (!VOD_PROVIDER_BASE_URL) return null;
+  const id = item.tmdb_id || item.imdb_id;
+  if (!id) return null;
+
+  if (item.media_type === 'tv') {
+    if (!selection.season || !selection.episode) return null;
+    return vodProviderUrl(`embed/tv/${encodeURIComponent(id)}/${encodeURIComponent(selection.season)}/${encodeURIComponent(selection.episode)}`).toString();
+  }
+
+  return vodProviderUrl(`embed/movie/${encodeURIComponent(id)}`).toString();
 }
 
 function normalizeAceContentId(input) {

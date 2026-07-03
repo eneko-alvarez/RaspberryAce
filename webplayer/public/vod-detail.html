@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VOD · AceStream TV</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="vod-detail-page">
+  <header>
+    <h1><a href="/" class="brand-link">📡 AceStream TV</a></h1>
+    <nav id="mode-tabs" aria-label="Secciones">
+      <a class="mode-tab" href="/">Directos</a>
+      <a class="mode-tab active" href="/#vod">VOD</a>
+    </nav>
+    <span id="channel-count">Detalle VOD</span>
+  </header>
+
+  <main id="vod-page">
+    <div id="vod-page-loading"><div class="spinner"></div>Cargando detalle…</div>
+    <div id="vod-page-error" style="display:none">No se pudo cargar el detalle.<br><small id="vod-page-error-msg"></small></div>
+    <div id="vod-page-content" style="display:none"></div>
+  </main>
+
+  <script src="/js/vod-detail.js"></script>
+</body>
+</html>

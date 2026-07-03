@@ -14,7 +14,7 @@ services:
       - TMDB_IMAGE_BASE_URL=${TMDB_IMAGE_BASE_URL:-https://image.tmdb.org/t/p}
       - TMDB_LANGUAGE=${TMDB_LANGUAGE:-es-ES}
       - TMDB_REGION=${TMDB_REGION:-ES}
-      - VOD_PROVIDER_BASE_URL=${VOD_PROVIDER_BASE_URL:-}
+      - VOD_PROVIDER_BASE_URL=${VOD_PROVIDER_BASE_URL:-https://api.eneko.com}
       - VOD_PROVIDER_TOKEN=${VOD_PROVIDER_TOKEN:-}
     restart: unless-stopped
     networks:
