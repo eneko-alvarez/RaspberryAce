@@ -8,6 +8,14 @@ const app = express();
 const PROXY_HOST = process.env.PROXY_HOST || 'httproxy';
 const PROXY_PORT = process.env.PROXY_PORT || '8888';
 const HLS_DIR = '/tmp/hls';
+const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL || 'https://api.themoviedb.org/3';
+const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p';
+const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN || '';
+const TMDB_LANGUAGE = process.env.TMDB_LANGUAGE || 'es-ES';
+const TMDB_REGION = process.env.TMDB_REGION || 'ES';
+const TMDB_CACHE_TTL_MS = Number(process.env.TMDB_CACHE_TTL_MS || 1000 * 60 * 30);
+const VOD_PROVIDER_BASE_URL = process.env.VOD_PROVIDER_BASE_URL || '';
+const VOD_PROVIDER_TOKEN = process.env.VOD_PROVIDER_TOKEN || '';
 
 const SUBGROUP_RULES = [
   { group: 'Deportes', label: 'DAZN', patterns: ['dazn'] },
@@ -126,6 +134,7 @@ app.use(express.json());
 if (!fs.existsSync(HLS_DIR)) fs.mkdirSync(HLS_DIR, { recursive: true });
 
 const activeStreams = {};
+const tmdbCache = new Map();
 
 setInterval(() => {
   const now = Date.now();
@@ -241,6 +250,124 @@ app.post('/api/custom-channel', (req, res) => {
   });
 });
 
+app.get('/api/vod/home', async (req, res) => {
+  try {
+    assertTmdbConfigured();
+    const sections = [
+      { key: 'trending_today', title: 'Tendencias de hoy', path: '/trending/all/day' },
+      { key: 'trending_week', title: 'Tendencias de la semana', path: '/trending/all/week' },
+      { key: 'popular_movies', title: 'Películas populares', path: '/movie/popular', params: { region: TMDB_REGION } },
+      { key: 'popular_tv', title: 'Series populares', path: '/tv/popular' },
+      { key: 'top_rated_movies', title: 'Mejor valoradas', path: '/movie/top_rated', params: { region: TMDB_REGION } },
+      { key: 'action_movies', title: 'Acción', path: '/discover/movie', params: { with_genres: 28, sort_by: 'popularity.desc', region: TMDB_REGION } },
+      { key: 'comedy_movies', title: 'Comedia', path: '/discover/movie', params: { with_genres: 35, sort_by: 'popularity.desc', region: TMDB_REGION } },
+      { key: 'documentaries', title: 'Documentales', path: '/discover/movie', params: { with_genres: 99, sort_by: 'popularity.desc', region: TMDB_REGION } },
+    ];
+
+    const payload = await Promise.all(sections.map(async section => {
+      const data = await tmdbFetch(section.path, section.params);
+      return {
+        key: section.key,
+        title: section.title,
+        items: normalizeMediaList(data.results).slice(0, 20)
+      };
+    }));
+
+    res.json({
+      sections: payload,
+      imageBaseUrl: TMDB_IMAGE_BASE_URL,
+      attribution: 'Metadata and images from TMDb.'
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
+app.get('/api/vod/search', async (req, res) => {
+  try {
+    assertTmdbConfigured();
+    const query = String(req.query.q || '').trim();
+    if (!query) return res.json({ results: [] });
+
+    const data = await tmdbFetch('/search/multi', {
+      query,
+      page: req.query.page || 1,
+      include_adult: false
+    }, 1000 * 60 * 10);
+
+    res.json({ results: normalizeMediaList(data.results).slice(0, 40) });
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
+app.get('/api/vod/tv/:id/season/:seasonNumber', async (req, res) => {
+  try {
+    assertTmdbConfigured();
+    const id = Number(req.params.id);
+    const seasonNumber = Number(req.params.seasonNumber);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(seasonNumber) || seasonNumber <= 0) {
+      return res.status(400).json({ error: 'Temporada inválida' });
+    }
+
+    const data = await tmdbFetch(`/tv/${id}/season/${seasonNumber}`, {}, 1000 * 60 * 60 * 24);
+    res.json(normalizeTvSeason(data));
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
+app.get('/api/vod/:mediaType/:id/playback', async (req, res) => {
+  try {
+    assertTmdbConfigured();
+    const mediaType = req.params.mediaType === 'tv' ? 'tv' : 'movie';
+    const id = Number(req.params.id);
+    const season = req.query.season ? Number(req.query.season) : null;
+    const episode = req.query.episode ? Number(req.query.episode) : null;
+
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'TMDb id inválido' });
+    if (mediaType === 'tv' && (!Number.isInteger(season) || !Number.isInteger(episode))) {
+      return res.status(400).json({ error: 'Las series requieren season y episode' });
+    }
+
+    const data = await tmdbFetch(`/${mediaType}/${id}`, {
+      append_to_response: 'external_ids'
+    }, 1000 * 60 * 60 * 24);
+
+    const item = normalizeMediaDetail(data, mediaType);
+    const playback = await getLicensedPlaybackOptions(item, { season, episode });
+    res.json(playback);
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
+app.get('/api/vod/:mediaType/:id', async (req, res) => {
+  try {
+    assertTmdbConfigured();
+    const mediaType = req.params.mediaType === 'tv' ? 'tv' : 'movie';
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'TMDb id inválido' });
+
+    const data = await tmdbFetch(`/${mediaType}/${id}`, {
+      append_to_response: 'external_ids,videos,credits,recommendations,similar'
+    }, 1000 * 60 * 60 * 24);
+
+    const detail = normalizeMediaDetail(data, mediaType);
+    detail.playback = mediaType === 'movie'
+      ? await getLicensedPlaybackOptions(detail)
+      : getPendingPlaybackOptions({ media_type: mediaType, tmdb_id: id });
+    res.json(detail);
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
 // Start or reuse HLS stream
 app.get('/stream/:channelId/index.m3u8', (req, res) => {
   const { channelId } = req.params;
@@ -307,6 +434,209 @@ function waitForFile(filePath, timeout) {
     };
     check();
   });
+}
+
+function assertTmdbConfigured() {
+  if (!TMDB_ACCESS_TOKEN) {
+    const err = new Error('Falta TMDB_ACCESS_TOKEN en el servicio webplayer');
+    err.status = 503;
+    throw err;
+  }
+}
+
+async function tmdbFetch(pathname, params = {}, ttl = TMDB_CACHE_TTL_MS) {
+  const url = new URL(`${TMDB_API_BASE_URL}${pathname}`);
+  url.searchParams.set('language', TMDB_LANGUAGE);
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  }
+
+  const cacheKey = url.toString();
+  const cached = tmdbCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < ttl) return cached.data;
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+      accept: 'application/json'
+    }
+  });
+
+  if (!res.ok) {
+    const err = new Error(`TMDb error ${res.status}: ${await res.text()}`);
+    err.status = res.status;
+    throw err;
+  }
+
+  const data = await res.json();
+  tmdbCache.set(cacheKey, { createdAt: Date.now(), data });
+  return data;
+}
+
+function normalizeMediaList(items) {
+  return (items || [])
+    .map(normalizeMediaSummary)
+    .filter(item => item && (item.media_type === 'movie' || item.media_type === 'tv'));
+}
+
+function normalizeMediaSummary(item) {
+  const mediaType = item.media_type || (item.title ? 'movie' : 'tv');
+  if (mediaType !== 'movie' && mediaType !== 'tv') return null;
+
+  return {
+    tmdb_id: item.id,
+    media_type: mediaType,
+    title: item.title || item.name || 'Sin título',
+    original_title: item.original_title || item.original_name || null,
+    overview: item.overview || '',
+    poster_path: item.poster_path || null,
+    backdrop_path: item.backdrop_path || null,
+    release_date: item.release_date || null,
+    first_air_date: item.first_air_date || null,
+    vote_average: item.vote_average || 0,
+    vote_count: item.vote_count || 0,
+    popularity: item.popularity || 0
+  };
+}
+
+function normalizeMediaDetail(item, mediaType) {
+  const summary = normalizeMediaSummary({ ...item, media_type: mediaType });
+  return {
+    ...summary,
+    imdb_id: item.external_ids?.imdb_id || item.imdb_id || null,
+    runtime: item.runtime || null,
+    number_of_seasons: item.number_of_seasons || null,
+    number_of_episodes: item.number_of_episodes || null,
+    seasons: (item.seasons || []).filter(season => season.season_number > 0).map(season => ({
+      id: season.id,
+      name: season.name,
+      season_number: season.season_number,
+      episode_count: season.episode_count,
+      poster_path: season.poster_path || null
+    })),
+    genres: item.genres || [],
+    cast: (item.credits?.cast || []).slice(0, 10).map(person => ({
+      id: person.id,
+      name: person.name,
+      character: person.character,
+      profile_path: person.profile_path || null
+    })),
+    videos: selectPublicVideos(item.videos?.results || []),
+    recommendations: normalizeMediaList(item.recommendations?.results).slice(0, 16),
+    similar: normalizeMediaList(item.similar?.results).slice(0, 16)
+  };
+}
+
+function normalizeTvSeason(item) {
+  return {
+    id: item.id,
+    name: item.name,
+    season_number: item.season_number,
+    overview: item.overview || '',
+    poster_path: item.poster_path || null,
+    episodes: (item.episodes || []).map(episode => ({
+      id: episode.id,
+      name: episode.name,
+      overview: episode.overview || '',
+      episode_number: episode.episode_number,
+      season_number: episode.season_number,
+      still_path: episode.still_path || null,
+      air_date: episode.air_date || null,
+      runtime: episode.runtime || null,
+      vote_average: episode.vote_average || 0
+    }))
+  };
+}
+
+function getPendingPlaybackOptions(item, selection = {}) {
+  return {
+    configured: Boolean(VOD_PROVIDER_BASE_URL),
+    providers: [],
+    request: buildPlaybackRequest(item, selection),
+    message: VOD_PROVIDER_BASE_URL
+      ? 'Proveedor VOD configurado, pero no devolvió opciones reproducibles.'
+      : 'Proveedor VOD legal pendiente de configurar. Usando trailers y clips oficiales.'
+  };
+}
+
+async function getLicensedPlaybackOptions(item, selection = {}) {
+  const empty = getPendingPlaybackOptions(item, selection);
+  if (!VOD_PROVIDER_BASE_URL) return empty;
+
+  const url = vodProviderUrl('playback');
+  const request = buildPlaybackRequest(item, selection);
+  for (const [key, value] of Object.entries(request)) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  }
+
+  const headers = { accept: 'application/json' };
+  if (VOD_PROVIDER_TOKEN) headers.Authorization = `Bearer ${VOD_PROVIDER_TOKEN}`;
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    console.warn(`VOD provider error ${res.status}: ${await res.text()}`);
+    return empty;
+  }
+
+  const data = await res.json();
+  const providers = Array.isArray(data.providers) ? data.providers : [];
+  return {
+    configured: true,
+    request,
+    providers: providers
+      .filter(provider => provider && (provider.embed_url || provider.stream_url))
+      .map(provider => ({
+        id: String(provider.id || provider.name || 'provider'),
+        name: String(provider.name || 'Proveedor VOD'),
+        type: provider.embed_url ? 'embed' : 'stream',
+        embed_url: provider.embed_url || null,
+        stream_url: provider.stream_url || null
+      })),
+    message: data.message || empty.message
+  };
+}
+
+function buildPlaybackRequest(item, selection = {}) {
+  const request = {
+    media_type: item.media_type,
+    tmdb_id: item.tmdb_id,
+    imdb_id: item.imdb_id || null
+  };
+
+  if (item.media_type === 'tv') {
+    request.season = selection.season || null;
+    request.episode = selection.episode || null;
+  }
+
+  return request;
+}
+
+function vodProviderUrl(pathname) {
+  const base = new URL(VOD_PROVIDER_BASE_URL);
+  if (!base.pathname.endsWith('/')) base.pathname += '/';
+  return new URL(pathname, base);
+}
+
+function selectPublicVideos(videos) {
+  const preferredTypes = ['Trailer', 'Teaser', 'Clip', 'Featurette'];
+  return videos
+    .filter(video => video.site === 'YouTube' && preferredTypes.includes(video.type))
+    .sort((a, b) => {
+      const officialDiff = Number(Boolean(b.official)) - Number(Boolean(a.official));
+      if (officialDiff) return officialDiff;
+      return preferredTypes.indexOf(a.type) - preferredTypes.indexOf(b.type);
+    })
+    .slice(0, 8)
+    .map(video => ({
+      id: video.id,
+      key: video.key,
+      name: video.name,
+      site: video.site,
+      type: video.type,
+      official: Boolean(video.official),
+      published_at: video.published_at || null,
+      embed_url: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.key)}?autoplay=1&rel=0`
+    }));
 }
 
 function normalizeAceContentId(input) {

@@ -9,6 +9,13 @@ services:
     environment:
       - PROXY_HOST=${PROXY_HOST:-192.168.1.125}
       - PROXY_PORT=${PROXY_PORT:-8888}
+      - TMDB_ACCESS_TOKEN=${TMDB_ACCESS_TOKEN:-}
+      - TMDB_API_BASE_URL=${TMDB_API_BASE_URL:-https://api.themoviedb.org/3}
+      - TMDB_IMAGE_BASE_URL=${TMDB_IMAGE_BASE_URL:-https://image.tmdb.org/t/p}
+      - TMDB_LANGUAGE=${TMDB_LANGUAGE:-es-ES}
+      - TMDB_REGION=${TMDB_REGION:-ES}
+      - VOD_PROVIDER_BASE_URL=${VOD_PROVIDER_BASE_URL:-}
+      - VOD_PROVIDER_TOKEN=${VOD_PROVIDER_TOKEN:-}
     restart: unless-stopped
     networks:
       - aceproxy-net

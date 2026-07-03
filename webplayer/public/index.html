@@ -22,6 +22,9 @@
     /* ── Header ── */
     header { background: var(--surface); padding: 14px 20px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #ffffff0f; }
     header h1 { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space: nowrap; }
+    #mode-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 9px; background: #ffffff0a; border: 1px solid #ffffff0d; }
+    .mode-tab { border: none; border-radius: 7px; background: transparent; color: var(--text2); padding: 7px 11px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .mode-tab.active { background: var(--accent); color: #fff; }
     #search-wrap { flex: 1; max-width: 560px; display: flex; gap: 8px; min-width: 180px; }
     #search { flex: 1; min-width: 0; background: var(--surface2); border: 1px solid #ffffff12; border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 14px; outline: none; transition: border-color .2s; }
     #search:focus { border-color: var(--accent); }
@@ -94,6 +97,53 @@
     .ch-logo-placeholder { width: 56px; height: 56px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 22px; }
     .ch-name { font-size: 11px; color: var(--text2); line-height: 1.3; word-break: break-word; }
 
+    /* ── VOD ── */
+    body.vod-mode #sidebar { display: none; }
+    body.vod-mode #main { padding: 0; }
+    body.vod-mode #custom-btn { display: none; }
+    #vod-content { display: none; }
+    body.vod-mode #vod-content { display: block; }
+    body.vod-mode #content, body.vod-mode #loading-state, body.vod-mode #error-state { display: none !important; }
+    #vod-loading, #vod-error { padding: 64px 24px; color: var(--text2); text-align: center; }
+    #vod-home { padding-bottom: 28px; }
+    .vod-hero { min-height: 410px; display: flex; align-items: flex-end; padding: 72px 32px 32px; background-size: cover; background-position: center; position: relative; }
+    .vod-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #0a0a0fee 0%, #0a0a0f9e 42%, #0a0a0f20 100%), linear-gradient(180deg, #0a0a0f44 0%, #0a0a0f 100%); }
+    .vod-hero-inner { position: relative; z-index: 1; max-width: 680px; }
+    .vod-kicker { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; color: #ffb35c; text-transform: uppercase; margin-bottom: 10px; }
+    .vod-hero h2 { font-size: clamp(32px, 6vw, 64px); line-height: .95; margin-bottom: 14px; letter-spacing: 0; }
+    .vod-meta { display: flex; gap: 12px; flex-wrap: wrap; color: #d7d7e8; font-size: 13px; font-weight: 700; margin-bottom: 14px; }
+    .vod-overview { color: #d4d4e2; line-height: 1.45; max-width: 620px; margin-bottom: 18px; }
+    .vod-action { border: none; border-radius: 8px; background: #fff; color: #101014; height: 40px; padding: 0 16px; font-weight: 800; cursor: pointer; }
+    .vod-action.secondary { background: #ffffff24; color: #fff; margin-left: 8px; }
+    .vod-section { padding: 18px 24px 6px; }
+    .vod-section h3 { font-size: 18px; margin: 0 0 10px; }
+    .vod-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(148px, 180px); gap: 12px; overflow-x: auto; padding-bottom: 12px; }
+    .vod-card { border: 1px solid #ffffff0d; border-radius: 8px; background: var(--surface); overflow: hidden; cursor: pointer; text-align: left; transition: transform .2s, border-color .2s, background .2s; min-height: 310px; }
+    .vod-card:hover { transform: translateY(-2px); border-color: #ffb35c88; background: var(--surface2); }
+    .vod-poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: #20202c; display: block; }
+    .vod-poster-fallback { width: 100%; aspect-ratio: 2 / 3; background: #20202c; display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 12px; padding: 10px; text-align: center; }
+    .vod-card-body { padding: 9px; }
+    .vod-title { font-size: 12px; font-weight: 800; color: var(--text); line-height: 1.25; min-height: 31px; }
+    .vod-card-meta { color: var(--text2); font-size: 11px; margin-top: 6px; display: flex; justify-content: space-between; gap: 6px; }
+    .vod-detail { position: fixed; inset: 0; z-index: 180; background: #050507f5; overflow-y: auto; display: none; }
+    .vod-detail.open { display: block; }
+    .vod-detail-hero { min-height: 390px; background-size: cover; background-position: center; position: relative; display: flex; align-items: flex-end; padding: 72px 28px 28px; }
+    .vod-detail-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #050507f5 0%, #050507c9 52%, #05050733 100%), linear-gradient(180deg, transparent 0%, #050507 100%); }
+    .vod-detail-body { position: relative; z-index: 1; max-width: 760px; }
+    .vod-detail-body h2 { font-size: clamp(30px, 5vw, 56px); line-height: 1; margin-bottom: 12px; }
+    .vod-detail-close { position: fixed; top: 14px; right: 16px; z-index: 181; width: 38px; height: 38px; border: none; border-radius: 50%; background: #ffffff1a; color: #fff; font-size: 18px; cursor: pointer; }
+    .vod-trailer-list { padding: 18px 28px 28px; }
+    .vod-trailer-list h3 { margin-bottom: 12px; }
+    .vod-video-btn { margin: 0 8px 8px 0; border: 1px solid #ffffff1f; border-radius: 8px; background: #ffffff12; color: #fff; padding: 10px 12px; cursor: pointer; }
+    .vod-provider-note { color: var(--text2); font-size: 13px; line-height: 1.4; margin-bottom: 12px; }
+    .vod-episode-tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; align-items: center; }
+    .vod-select { min-width: 150px; height: 38px; border: 1px solid #ffffff18; border-radius: 8px; background: var(--surface2); color: var(--text); padding: 0 10px; }
+    .vod-small-action { height: 38px; border: none; border-radius: 8px; background: #ffffff; color: #101014; padding: 0 12px; font-weight: 800; cursor: pointer; }
+    #vod-frame { width: 100%; aspect-ratio: 16/9; border: 0; display: none; background: #000; }
+    #player-shell.vod-player video, #player-shell.vod-player #stream-loader, #player-shell.vod-player #stream-error, #player-shell.vod-player #live-controls { display: none !important; }
+    #player-shell.vod-player #vod-frame { display: block; }
+    .tmdb-credit { color: var(--text2); font-size: 11px; padding: 8px 24px 20px; }
+
     /* ── States ── */
     #loading-state, #error-state { padding: 60px 20px; text-align: center; color: var(--text2); }
     .spinner { width: 36px; height: 36px; border: 3px solid #ffffff15; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
@@ -101,15 +151,22 @@
 
     /* ── Mobile ── */
     @media (max-width: 640px) {
+      header { flex-wrap: wrap; }
+      #app { height: calc(100vh - 101px); }
       #sidebar { display: none; }
-      #sidebar.open { display: flex; position: fixed; inset: 57px 0 0 0; z-index: 150; width: 100%; }
+      #sidebar.open { display: flex; position: fixed; inset: 101px 0 0 0; z-index: 150; width: 100%; }
       #menu-btn { display: flex; }
       #main { padding: 16px; }
       header { gap: 10px; }
       header h1 { font-size: 16px; }
       #search-wrap { max-width: none; }
       #custom-btn { padding: 0 10px; font-size: 12px; }
+      #mode-tabs { order: 3; width: 100%; }
+      .mode-tab { flex: 1; }
       .channel-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+      .vod-hero, .vod-detail-hero { min-height: 360px; padding: 56px 18px 24px; }
+      .vod-section { padding: 16px 14px 4px; }
+      .vod-row { grid-auto-columns: minmax(132px, 148px); }
       #player-overlay { padding: 10px; }
       #live-controls { gap: 7px; padding: 10px; flex-wrap: wrap; }
       .live-badge { font-size: 10px; padding: 0 8px; }
@@ -128,6 +185,10 @@
 <header>
   <button id="menu-btn" onclick="toggleSidebar()">☰</button>
   <h1>📡 AceStream TV</h1>
+  <nav id="mode-tabs" aria-label="Secciones">
+    <button id="live-tab" class="mode-tab active" type="button" onclick="setAppMode('live')">Directos</button>
+    <button id="vod-tab" class="mode-tab" type="button" onclick="setAppMode('vod')">VOD</button>
+  </nav>
   <div id="search-wrap">
     <input id="search" type="search" placeholder="Buscar canal o pegar AceStream ID…" oninput="onSearch(this.value)" onkeydown="onSearchKeydown(event)">
     <button id="custom-btn" onclick="loadCustomChannel()">Cargar</button>
@@ -143,6 +204,11 @@
     <div id="loading-state"><div class="spinner"></div>Cargando canales…</div>
     <div id="error-state" style="display:none">❌ Error cargando canales.<br><small id="error-msg"></small></div>
     <div id="content" style="display:none"></div>
+    <div id="vod-content">
+      <div id="vod-loading"><div class="spinner"></div>Cargando VOD…</div>
+      <div id="vod-error" style="display:none">No se pudo cargar VOD.<br><small id="vod-error-msg"></small></div>
+      <div id="vod-home" style="display:none"></div>
+    </div>
   </div>
 </div>
 
@@ -157,6 +223,7 @@
     </div>
     <div id="player-shell">
       <video id="video" autoplay playsinline></video>
+      <iframe id="vod-frame" title="Trailer VOD" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
       <div id="stream-loader" hidden>
         <div class="stream-loader-inner">
           <div class="stream-spinner"></div>
@@ -181,6 +248,11 @@
   </div>
 </div>
 
+<div id="vod-detail" class="vod-detail" aria-modal="true">
+  <button class="vod-detail-close" type="button" onclick="closeVodDetail()">✕</button>
+  <div id="vod-detail-content"></div>
+</div>
+
 <script>
   let allChannels = [];
   let grouped = {};
@@ -195,8 +267,14 @@
   let streamLoadStartedAt = 0;
   let activeChannel = null;
   let userClosedPlayer = false;
+  let appMode = 'live';
+  let vodLoaded = false;
+  let vodHomeSections = [];
+  let vodSearchTimer = null;
+  let activeVodItem = null;
   const sidebarEl = document.getElementById('sidebar');
   const videoEl = document.getElementById('video');
+  const vodFrameEl = document.getElementById('vod-frame');
   const playerShellEl = document.getElementById('player-shell');
   const streamLoaderEl = document.getElementById('stream-loader');
   const streamErrorEl = document.getElementById('stream-error');
@@ -204,6 +282,256 @@
   let favoriteKeys = loadFavoriteKeys();
 
   function toggleSidebar() { sidebarEl.classList.toggle('open'); }
+
+  function setAppMode(mode) {
+    appMode = mode === 'vod' ? 'vod' : 'live';
+    document.body.classList.toggle('vod-mode', appMode === 'vod');
+    document.getElementById('live-tab').classList.toggle('active', appMode === 'live');
+    document.getElementById('vod-tab').classList.toggle('active', appMode === 'vod');
+    const search = document.getElementById('search');
+    search.value = '';
+    search.placeholder = appMode === 'vod' ? 'Buscar película o serie…' : 'Buscar canal o pegar AceStream ID…';
+    document.getElementById('channel-count').textContent = appMode === 'vod' ? 'VOD legal' : `${allChannels.length} canales`;
+    if (appMode === 'vod') {
+      if (!vodLoaded) loadVodHome();
+    } else {
+      renderCurrentView();
+      document.getElementById('channel-count').textContent = `${allChannels.length} canales`;
+    }
+  }
+
+  async function loadVodHome() {
+    const loading = document.getElementById('vod-loading');
+    const error = document.getElementById('vod-error');
+    const home = document.getElementById('vod-home');
+    loading.style.display = 'block';
+    error.style.display = 'none';
+    home.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/vod/home');
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      vodLoaded = true;
+      vodHomeSections = data.sections || [];
+      renderVodHome(vodHomeSections);
+      loading.style.display = 'none';
+      home.style.display = 'block';
+      document.getElementById('channel-count').textContent = 'TMDb + trailers oficiales';
+    } catch (e) {
+      loading.style.display = 'none';
+      error.style.display = 'block';
+      document.getElementById('vod-error-msg').textContent = e.message;
+      document.getElementById('channel-count').textContent = 'VOD no configurado';
+    }
+  }
+
+  function renderVodHome(sections) {
+    const home = document.getElementById('vod-home');
+    const heroItem = sections.flatMap(section => section.items || []).find(item => item.backdrop_path) || sections[0]?.items?.[0];
+    const hero = heroItem ? vodHeroHtml(heroItem) : '';
+    home.innerHTML = hero + sections.map(section => `
+      <section class="vod-section">
+        <h3>${escHtml(section.title)}</h3>
+        <div class="vod-row">${(section.items || []).map(item => vodCardHtml(item)).join('')}</div>
+      </section>
+    `).join('') + '<div class="tmdb-credit">Datos e imágenes proporcionados por TMDb. Reproducción limitada a trailers y clips públicos oficiales cuando estén disponibles.</div>';
+  }
+
+  function vodHeroHtml(item) {
+    const bg = tmdbImage(item.backdrop_path, 'w1280');
+    return `<section class="vod-hero" style="background-image:url('${escHtml(bg || '')}')">
+      <div class="vod-hero-inner">
+        <div class="vod-kicker">${item.media_type === 'tv' ? 'Serie' : 'Película'} destacada</div>
+        <h2>${escHtml(item.title)}</h2>
+        <div class="vod-meta">${vodMetaHtml(item)}</div>
+        <p class="vod-overview">${escHtml(shortText(item.overview, 260) || 'Sin sinopsis disponible.')}</p>
+        <button class="vod-action" type="button" onclick="openVodDetail(${jsArg(item)})">Ver trailers</button>
+        <button class="vod-action secondary" type="button" onclick="openVodDetail(${jsArg(item)})">Detalles</button>
+      </div>
+    </section>`;
+  }
+
+  function vodCardHtml(item) {
+    const poster = tmdbImage(item.poster_path, 'w342');
+    const image = poster
+      ? `<img class="vod-poster" src="${escHtml(poster)}" alt="" loading="lazy">`
+      : `<div class="vod-poster-fallback">${escHtml(item.title)}</div>`;
+    return `<button class="vod-card" type="button" onclick="openVodDetail(${jsArg(item)})">
+      ${image}
+      <div class="vod-card-body">
+        <div class="vod-title">${escHtml(item.title)}</div>
+        <div class="vod-card-meta"><span>${item.media_type === 'tv' ? 'Serie' : 'Película'} · ${escHtml(vodYear(item) || 's/f')}</span><span>${vodRating(item)}</span></div>
+      </div>
+    </button>`;
+  }
+
+  async function openVodDetail(item) {
+    const overlay = document.getElementById('vod-detail');
+    const content = document.getElementById('vod-detail-content');
+    overlay.classList.add('open');
+    content.innerHTML = '<div id="vod-loading"><div class="spinner"></div>Cargando detalle…</div>';
+
+    try {
+      const res = await fetch(`/api/vod/${encodeURIComponent(item.media_type)}/${encodeURIComponent(item.tmdb_id)}`);
+      const detail = await res.json();
+      if (!res.ok || detail.error) throw new Error(detail.error || `HTTP ${res.status}`);
+      activeVodItem = detail;
+      renderVodDetail(detail);
+    } catch (e) {
+      content.innerHTML = `<div id="vod-error">No se pudo cargar el detalle.<br><small>${escHtml(e.message)}</small></div>`;
+    }
+  }
+
+  function renderVodDetail(item) {
+    const content = document.getElementById('vod-detail-content');
+    const bg = tmdbImage(item.backdrop_path, 'w1280');
+    const videos = item.videos || [];
+    const providers = item.playback?.providers || [];
+    content.innerHTML = `<section class="vod-detail-hero" style="background-image:url('${escHtml(bg || '')}')">
+      <div class="vod-detail-body">
+        <div class="vod-kicker">${item.media_type === 'tv' ? 'Serie' : 'Película'} ${item.imdb_id ? '· IMDb ' + escHtml(item.imdb_id) : ''}</div>
+        <h2>${escHtml(item.title)}</h2>
+        <div class="vod-meta">${vodMetaHtml(item)}${item.runtime ? `<span>${item.runtime} min</span>` : ''}${item.number_of_seasons ? `<span>${item.number_of_seasons} temporadas</span>` : ''}</div>
+        <p class="vod-overview">${escHtml(item.overview || 'Sin sinopsis disponible.')}</p>
+        ${videos.length ? `<button class="vod-action" type="button" onclick="playVodVideo(${jsArg(item)}, ${jsArg(videos[0])})">Reproducir trailer</button>` : '<button class="vod-action" type="button" disabled>Sin trailer disponible</button>'}
+      </div>
+    </section>
+    <section class="vod-trailer-list">
+      <h3>Proveedor VOD legal</h3>
+      <p class="vod-provider-note">${escHtml(item.playback?.message || 'Proveedor VOD legal pendiente de configurar.')}</p>
+      ${item.media_type === 'tv' ? vodEpisodeSelectorHtml(item) : `<button class="vod-small-action" type="button" onclick="requestVodPlayback(${jsArg(item)})">Comprobar proveedor</button>`}
+      <div id="vod-provider-results">${providers.length ? providers.map(provider => `<button class="vod-video-btn" type="button" onclick="playVodProvider(${jsArg(item)}, ${jsArg(provider)})">${escHtml(provider.name)}</button>`).join('') : ''}</div>
+    </section>
+    <section class="vod-trailer-list">
+      <h3>Trailers y clips públicos</h3>
+      ${videos.length ? videos.map(video => `<button class="vod-video-btn" type="button" onclick="playVodVideo(${jsArg(item)}, ${jsArg(video)})">${escHtml(video.type)} · ${escHtml(video.name)}</button>`).join('') : '<p class="vod-overview">TMDb no devuelve trailers o clips públicos para este título.</p>'}
+    </section>
+    ${item.recommendations?.length ? `<section class="vod-section"><h3>Más como esto</h3><div class="vod-row">${item.recommendations.map(vodCardHtml).join('')}</div></section>` : ''}`;
+
+    if (item.media_type === 'tv' && item.seasons?.length) {
+      loadVodSeasonEpisodes(item.tmdb_id, item.seasons[0].season_number);
+    }
+  }
+
+  function vodEpisodeSelectorHtml(item) {
+    const seasons = item.seasons || [];
+    if (!seasons.length) return '<p class="vod-provider-note">TMDb no devuelve temporadas para esta serie.</p>';
+
+    return `<div class="vod-episode-tools">
+      <select id="vod-season-select" class="vod-select" onchange="loadVodSeasonEpisodes(${Number(item.tmdb_id)}, Number(this.value))">
+        ${seasons.map(season => `<option value="${season.season_number}">Temporada ${season.season_number}</option>`).join('')}
+      </select>
+      <select id="vod-episode-select" class="vod-select">
+        <option value="">Cargando episodios…</option>
+      </select>
+      <button class="vod-small-action" type="button" onclick="requestVodPlayback(${jsArg(item)})">Comprobar episodio</button>
+    </div>`;
+  }
+
+  async function loadVodSeasonEpisodes(tmdbId, seasonNumber) {
+    const select = document.getElementById('vod-episode-select');
+    if (!select) return;
+    select.innerHTML = '<option value="">Cargando episodios…</option>';
+
+    try {
+      const res = await fetch(`/api/vod/tv/${encodeURIComponent(tmdbId)}/season/${encodeURIComponent(seasonNumber)}`);
+      const season = await res.json();
+      if (!res.ok || season.error) throw new Error(season.error || `HTTP ${res.status}`);
+      select.innerHTML = (season.episodes || []).map(episode =>
+        `<option value="${episode.episode_number}">${episode.episode_number}. ${escHtml(episode.name || 'Episodio')}</option>`
+      ).join('');
+    } catch (e) {
+      select.innerHTML = `<option value="">${escHtml(e.message)}</option>`;
+    }
+  }
+
+  async function requestVodPlayback(item) {
+    const results = document.getElementById('vod-provider-results');
+    if (!results) return;
+    results.innerHTML = '<p class="vod-provider-note">Consultando proveedor…</p>';
+
+    const params = new URLSearchParams();
+    if (item.media_type === 'tv') {
+      const season = document.getElementById('vod-season-select')?.value;
+      const episode = document.getElementById('vod-episode-select')?.value;
+      if (!season || !episode) {
+        results.innerHTML = '<p class="vod-provider-note">Selecciona temporada y episodio.</p>';
+        return;
+      }
+      params.set('season', season);
+      params.set('episode', episode);
+    }
+
+    try {
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`/api/vod/${encodeURIComponent(item.media_type)}/${encodeURIComponent(item.tmdb_id)}/playback${query}`);
+      const playback = await res.json();
+      if (!res.ok || playback.error) throw new Error(playback.error || `HTTP ${res.status}`);
+      const providers = playback.providers || [];
+      results.innerHTML = `<p class="vod-provider-note">${escHtml(playback.message || 'Proveedor consultado.')}</p>`
+        + (providers.length ? providers.map(provider => `<button class="vod-video-btn" type="button" onclick="playVodProvider(${jsArg(item)}, ${jsArg(provider)})">${escHtml(provider.name)}</button>`).join('') : '');
+    } catch (e) {
+      results.innerHTML = `<p class="vod-provider-note">${escHtml(e.message)}</p>`;
+    }
+  }
+
+  function closeVodDetail() {
+    document.getElementById('vod-detail').classList.remove('open');
+    activeVodItem = null;
+  }
+
+  function playVodVideo(item, video) {
+    closeVodDetail();
+    activeVodItem = item;
+    activeChannel = null;
+    userClosedPlayer = false;
+    if (hls) { hls.destroy(); hls = null; }
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load();
+    hideStreamLoader(true);
+    hideStreamError();
+    stopLiveStateTimer();
+    stopControlsHideTimer();
+    playerShellEl.classList.add('vod-player');
+    document.getElementById('player-overlay').classList.add('open');
+    document.getElementById('player-title').textContent = `${item.title} · ${video.type}`;
+    document.getElementById('player-status').textContent = video.official ? 'Trailer oficial' : 'Trailer público';
+    document.getElementById('player-logo').style.display = 'none';
+    vodFrameEl.src = video.embed_url;
+  }
+
+  function playVodProvider(item, provider) {
+    closeVodDetail();
+    activeVodItem = item;
+    activeChannel = null;
+    userClosedPlayer = false;
+    if (hls) { hls.destroy(); hls = null; }
+    hideStreamLoader(true);
+    hideStreamError();
+    stopLiveStateTimer();
+    stopControlsHideTimer();
+    document.getElementById('player-overlay').classList.add('open');
+    document.getElementById('player-title').textContent = `${item.title} · ${provider.name}`;
+    document.getElementById('player-status').textContent = 'Proveedor VOD legal';
+    document.getElementById('player-logo').style.display = 'none';
+
+    if (provider.embed_url) {
+      playerShellEl.classList.add('vod-player');
+      videoEl.pause();
+      videoEl.removeAttribute('src');
+      videoEl.load();
+      vodFrameEl.src = provider.embed_url;
+      return;
+    }
+
+    playerShellEl.classList.remove('vod-player');
+    vodFrameEl.src = '';
+    videoEl.setAttribute('controls', '');
+    videoEl.src = provider.stream_url;
+    videoEl.play();
+  }
 
   async function loadChannels() {
     try {
@@ -316,6 +644,12 @@
   }
 
   function onSearch(q) {
+    if (appMode === 'vod') {
+      clearTimeout(vodSearchTimer);
+      vodSearchTimer = setTimeout(() => searchVod(q), 250);
+      return;
+    }
+
     const filtered = allChannels.filter(ch => ch.name.toLowerCase().includes(q.toLowerCase()));
     document.getElementById('channel-count').textContent = `${filtered.length} canales`;
     if (!q) { renderCurrentView(); return; }
@@ -323,7 +657,35 @@
     content.innerHTML = `<div class="group-title">Resultados: "${escHtml(q)}"</div><div class="channel-grid">${filtered.map(ch => cardHtml(ch)).join('')}</div>`;
   }
 
+  async function searchVod(q) {
+    const query = q.trim();
+    const home = document.getElementById('vod-home');
+    if (!query) {
+      if (vodHomeSections.length) renderVodHome(vodHomeSections);
+      home.style.display = vodLoaded ? 'block' : 'none';
+      document.getElementById('channel-count').textContent = vodLoaded ? 'TMDb + trailers oficiales' : 'VOD legal';
+      return;
+    }
+
+    home.style.display = 'block';
+    home.innerHTML = `<div id="vod-loading"><div class="spinner"></div>Buscando…</div>`;
+    try {
+      const res = await fetch(`/api/vod/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      document.getElementById('channel-count').textContent = `${data.results.length} resultados`;
+      home.innerHTML = `<section class="vod-section">
+        <h3>Resultados: "${escHtml(query)}"</h3>
+        <div class="vod-row">${data.results.map(vodCardHtml).join('')}</div>
+      </section>`;
+    } catch (e) {
+      document.getElementById('channel-count').textContent = 'Error VOD';
+      home.innerHTML = `<div id="vod-error">No se pudo buscar.<br><small>${escHtml(e.message)}</small></div>`;
+    }
+  }
+
   function onSearchKeydown(event) {
+    if (appMode === 'vod') return;
     if (event.key === 'Enter' && looksLikeAceInput(event.currentTarget.value)) {
       event.preventDefault();
       loadCustomChannel();
@@ -454,7 +816,10 @@
   function playChannel(chJson) {
     const ch = chJson;
     activeChannel = ch;
+    activeVodItem = null;
     userClosedPlayer = false;
+    playerShellEl.classList.remove('vod-player');
+    vodFrameEl.src = '';
     const overlay = document.getElementById('player-overlay');
     overlay.classList.add('open');
     document.getElementById('player-title').textContent = ch.name;
@@ -507,6 +872,7 @@
   function closePlayer() {
     userClosedPlayer = true;
     activeChannel = null;
+    activeVodItem = null;
     document.getElementById('player-overlay').classList.remove('open');
     if (hls) { hls.destroy(); hls = null; }
     stopLiveStateTimer();
@@ -514,6 +880,8 @@
     hideStreamLoader(true);
     hideStreamError();
     playerShellEl.classList.remove('controls-hidden');
+    playerShellEl.classList.remove('vod-player');
+    vodFrameEl.src = '';
     videoEl.pause();
     videoEl.removeAttribute('src');
     videoEl.load();
@@ -653,7 +1021,12 @@
   }
 
   document.getElementById('player-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closePlayer(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePlayer(); });
+  document.getElementById('vod-detail').addEventListener('click', e => { if (e.target === e.currentTarget) closeVodDetail(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('vod-detail').classList.contains('open')) closeVodDetail();
+    else closePlayer();
+  });
   playerShellEl.addEventListener('mousemove', showPlayerControls);
   playerShellEl.addEventListener('touchstart', showPlayerControls, { passive: true });
   playerShellEl.addEventListener('click', showPlayerControls);
@@ -671,6 +1044,30 @@
   videoEl.addEventListener('waiting', () => {
     if (!streamLoaderEl.hidden) updateStreamLoader(streamLoadProgress);
   });
+
+  function tmdbImage(path, size) {
+    return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
+  }
+
+  function vodYear(item) {
+    const date = item.release_date || item.first_air_date || '';
+    return date ? date.slice(0, 4) : '';
+  }
+
+  function vodRating(item) {
+    const value = Number(item.vote_average || 0);
+    return value > 0 ? `★ ${value.toFixed(1)}` : '★ -';
+  }
+
+  function vodMetaHtml(item) {
+    return `<span>${item.media_type === 'tv' ? 'Serie' : 'Película'}</span><span>${escHtml(vodYear(item) || 'Sin fecha')}</span><span>${vodRating(item)}</span>`;
+  }
+
+  function shortText(value, max) {
+    const text = String(value || '').trim();
+    if (text.length <= max) return text;
+    return `${text.slice(0, max - 1).trim()}…`;
+  }
 
   function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function jsArg(value) { return escHtml(JSON.stringify(value)); }
