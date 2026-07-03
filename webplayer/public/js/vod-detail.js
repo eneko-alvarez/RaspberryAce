@@ -1,4 +1,6 @@
 let activeVodItem = null;
+let currentSeasonEpisodes = [];
+const VOD_CONTINUE_KEY = 'raspberryace:vod-continue:v1';
 
 document.addEventListener('DOMContentLoaded', loadVodDetailPage);
 
@@ -34,6 +36,10 @@ async function loadVodDetailPage() {
 function renderVodPage(item) {
   const content = document.getElementById('vod-page-content');
   const bg = tmdbImage(item.backdrop_path, 'w1280');
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialSeason = Number(searchParams.get('season')) || item.seasons?.[0]?.season_number;
+  const initialEpisode = Number(searchParams.get('episode')) || null;
+  const shouldAutoplay = searchParams.get('play') === '1';
 
   content.innerHTML = `<section class="vod-detail-hero vod-page-hero" style="background-image:url('${escHtml(bg || '')}')">
     <div class="vod-detail-body">
@@ -41,14 +47,14 @@ function renderVodPage(item) {
       <h2>${escHtml(item.title)}</h2>
       <div class="vod-meta">${vodMetaHtml(item)}${item.runtime ? `<span>${item.runtime} min</span>` : ''}${item.number_of_seasons ? `<span>${item.number_of_seasons} temporadas</span>` : ''}</div>
       <p class="vod-overview">${escHtml(item.overview || 'Sin sinopsis disponible.')}</p>
-      ${item.media_type === 'tv' ? '<a class="vod-action" href="#vod-provider-panel">Seleccionar episodio</a>' : '<button class="vod-action" type="button" onclick="requestVodPlayback()">Cargar desde API</button>'}
+      <div class="vod-hero-provider">
+        ${item.media_type === 'tv' ? vodEpisodeSelectorHtml(item, initialSeason) : '<button class="vod-action" type="button" onclick="requestVodPlayback()">Cargar desde API</button>'}
+      </div>
     </div>
   </section>
 
   <section id="vod-provider-panel" class="vod-provider-panel">
-    <h3>API VOD legal</h3>
-    <p class="vod-provider-note">La reproducción se solicita exclusivamente al proveedor VOD legal configurado.</p>
-    ${item.media_type === 'tv' ? vodEpisodeSelectorHtml(item) : `<button class="vod-small-action" type="button" onclick="requestVodPlayback()">Cargar desde API</button>`}
+    <h3>Reproducción</h3>
     <div id="vod-provider-results"></div>
     <div id="vod-api-player"></div>
   </section>
@@ -57,22 +63,27 @@ function renderVodPage(item) {
   <div class="tmdb-credit">Datos e imágenes proporcionados por TMDb. La reproducción depende del proveedor VOD legal configurado.</div>`;
 
   if (item.media_type === 'tv' && item.seasons?.length) {
-    loadVodSeasonEpisodes(item.tmdb_id, item.seasons[0].season_number);
+    loadVodSeasonEpisodes(item.tmdb_id, initialSeason).then(() => {
+      if (initialEpisode) document.getElementById('vod-episode-select').value = String(initialEpisode);
+      if (shouldAutoplay && document.getElementById('vod-episode-select').value) requestVodPlayback();
+    });
+  } else if (shouldAutoplay) {
+    requestVodPlayback();
   }
 }
 
-function vodEpisodeSelectorHtml(item) {
+function vodEpisodeSelectorHtml(item, selectedSeason) {
   const seasons = item.seasons || [];
   if (!seasons.length) return '<p class="vod-provider-note">TMDb no devuelve temporadas para esta serie.</p>';
 
   return `<div class="vod-episode-tools">
     <select id="vod-season-select" class="vod-select" onchange="loadVodSeasonEpisodes(${Number(item.tmdb_id)}, Number(this.value))">
-      ${seasons.map(season => `<option value="${season.season_number}">Temporada ${season.season_number}</option>`).join('')}
+      ${seasons.map(season => `<option value="${season.season_number}"${Number(season.season_number) === Number(selectedSeason) ? ' selected' : ''}>Temporada ${season.season_number}</option>`).join('')}
     </select>
     <select id="vod-episode-select" class="vod-select">
       <option value="">Cargando episodios…</option>
     </select>
-    <button class="vod-small-action" type="button" onclick="requestVodPlayback()">Comprobar episodio</button>
+    <button class="vod-action" type="button" onclick="requestVodPlayback()">Cargar desde API</button>
   </div>`;
 }
 
@@ -85,11 +96,15 @@ async function loadVodSeasonEpisodes(tmdbId, seasonNumber) {
     const res = await fetch(`/api/vod/tv/${encodeURIComponent(tmdbId)}/season/${encodeURIComponent(seasonNumber)}`);
     const season = await res.json();
     if (!res.ok || season.error) throw new Error(season.error || `HTTP ${res.status}`);
+    currentSeasonEpisodes = season.episodes || [];
     select.innerHTML = (season.episodes || []).map(episode =>
       `<option value="${episode.episode_number}">${episode.episode_number}. ${escHtml(episode.name || 'Episodio')}</option>`
     ).join('');
+    return season;
   } catch (e) {
+    currentSeasonEpisodes = [];
     select.innerHTML = `<option value="">${escHtml(e.message)}</option>`;
+    return null;
   }
 }
 
@@ -116,12 +131,66 @@ async function requestVodPlayback() {
     const playback = await res.json();
     if (!res.ok || playback.error) throw new Error(playback.error || `HTTP ${res.status}`);
     const providers = playback.providers || [];
-    results.innerHTML = `<p class="vod-provider-note">${escHtml(playback.message || 'Proveedor consultado.')}</p>`
-      + (providers.length ? `<div class="vod-provider-actions">${providers.map(providerButtonHtml).join('')}</div>` : '');
+    saveVodContinueEntry();
+    results.innerHTML = `<p class="vod-provider-note">${escHtml(playback.message)}</p>`
+      + (providers.length ? `<div class="vod-provider-actions">${providers.map(providerButtonHtml).join('')}</div>` : '')
+      + nextEpisodeHtml();
     if (providers[0]?.embed_url || providers[0]?.url) playVodProvider(providers[0]);
   } catch (e) {
     results.innerHTML = `<p class="vod-provider-note">${escHtml(e.message)}</p>`;
   }
+}
+
+function saveVodContinueEntry() {
+  if (!activeVodItem) return;
+  const season = document.getElementById('vod-season-select')?.value || null;
+  const episode = document.getElementById('vod-episode-select')?.value || null;
+  const episodeOption = document.getElementById('vod-episode-select')?.selectedOptions?.[0]?.textContent || '';
+  const entry = {
+    key: `${activeVodItem.media_type}:${activeVodItem.tmdb_id}:${season || 'movie'}:${episode || 'movie'}`,
+    tmdb_id: activeVodItem.tmdb_id,
+    media_type: activeVodItem.media_type,
+    title: activeVodItem.title,
+    poster_path: activeVodItem.poster_path,
+    backdrop_path: activeVodItem.backdrop_path,
+    release_date: activeVodItem.release_date,
+    first_air_date: activeVodItem.first_air_date,
+    vote_average: activeVodItem.vote_average,
+    season,
+    episode,
+    episode_label: episodeOption,
+    updated_at: Date.now()
+  };
+
+  const entries = loadVodContinueEntries().filter(item => item.key !== entry.key);
+  entries.unshift(entry);
+  localStorage.setItem(VOD_CONTINUE_KEY, JSON.stringify(entries.slice(0, 12)));
+}
+
+function loadVodContinueEntries() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(VOD_CONTINUE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function nextEpisodeHtml() {
+  if (activeVodItem?.media_type !== 'tv') return '';
+  const selectedEpisode = Number(document.getElementById('vod-episode-select')?.value);
+  const next = currentSeasonEpisodes.find(episode => Number(episode.episode_number) > selectedEpisode);
+  if (!next) return '';
+  return `<div class="vod-next-episode">
+    <button class="vod-video-btn" type="button" onclick="playNextEpisode(${Number(next.episode_number)})">Siguiente episodio: ${Number(next.episode_number)}. ${escHtml(next.name || 'Episodio')}</button>
+  </div>`;
+}
+
+function playNextEpisode(episodeNumber) {
+  const select = document.getElementById('vod-episode-select');
+  if (!select) return;
+  select.value = String(episodeNumber);
+  requestVodPlayback();
 }
 
 function providerButtonHtml(provider) {

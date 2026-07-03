@@ -21,6 +21,7 @@ const playerShellEl = document.getElementById('player-shell');
 const streamLoaderEl = document.getElementById('stream-loader');
 const streamErrorEl = document.getElementById('stream-error');
 const FAVORITES_KEY = 'raspberryace:favorites:v1';
+const VOD_CONTINUE_KEY = 'raspberryace:vod-continue:v1';
 let favoriteKeys = loadFavoriteKeys();
 
 function toggleSidebar() { sidebarEl.classList.toggle('open'); }
@@ -75,9 +76,11 @@ function renderVodHome(sections) {
     return;
   }
 
+  const continueItems = loadVodContinueItems();
+  const continueSection = continueItems.length ? vodContinueSectionHtml(continueItems) : '';
   const heroItem = sections.flatMap(section => section.items || []).find(item => item.backdrop_path) || sections[0]?.items?.[0];
   const hero = heroItem ? vodHeroHtml(heroItem) : '';
-  home.innerHTML = hero + sections.map(section => `
+  home.innerHTML = hero + continueSection + sections.map(section => `
     <section class="vod-section">
       <h3>${escHtml(section.title)}</h3>
       <div class="vod-row">${(section.items || []).map(item => vodCardHtml(item)).join('')}</div>
@@ -113,6 +116,49 @@ function vodCardHtml(item) {
       <div class="vod-card-meta"><span>${item.media_type === 'tv' ? 'Serie' : 'Película'} · ${escHtml(vodYear(item) || 's/f')}</span><span>${vodRating(item)}</span></div>
     </div>
   </a>`;
+}
+
+function vodContinueSectionHtml(items) {
+  return `<section class="vod-section">
+    <h3>Seguir viendo</h3>
+    <div class="vod-row">${items.map(vodContinueCardHtml).join('')}</div>
+  </section>`;
+}
+
+function vodContinueCardHtml(item) {
+  const poster = tmdbImage(item.poster_path, 'w342');
+  const url = vodContinueUrl(item);
+  const label = item.media_type === 'tv' && item.season && item.episode
+    ? `T${item.season} E${item.episode}`
+    : 'Película';
+  const image = poster
+    ? `<img class="vod-poster" src="${escHtml(poster)}" alt="" loading="lazy">`
+    : `<div class="vod-poster-fallback">${escHtml(item.title)}</div>`;
+  return `<a class="vod-card vod-continue-card" href="${escHtml(url)}">
+    ${image}
+    <div class="vod-card-body">
+      <div class="vod-progress-pill">${escHtml(label)}</div>
+      <div class="vod-title">${escHtml(item.title)}</div>
+      <div class="vod-card-meta"><span>${escHtml(shortText(item.episode_label || 'Reanudar reproducción', 34))}</span></div>
+    </div>
+  </a>`;
+}
+
+function vodContinueUrl(item) {
+  const params = new URLSearchParams();
+  params.set('play', '1');
+  if (item.season) params.set('season', item.season);
+  if (item.episode) params.set('episode', item.episode);
+  return `${vodDetailUrl(item)}?${params.toString()}`;
+}
+
+function loadVodContinueItems() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(VOD_CONTINUE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.slice(0, 12) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function openVodDetail(item) {
@@ -198,23 +244,78 @@ function getCurrentChannels() {
 
 function renderGrid(view, channels) {
   const content = document.getElementById('content');
-  if (!channels.length) { content.innerHTML = '<div style="color:var(--text2);padding:40px">Sin canales</div>'; return; }
+  const hero = liveHeroHtml(view, channels);
+  if (!channels.length) {
+    content.innerHTML = `${hero}<section class="live-section"><div class="empty-state">Sin canales en esta selección.</div></section>`;
+    return;
+  }
 
   if (view.type === 'all') {
-    // Render by groups
     const groups = Object.keys(grouped);
-    content.innerHTML = groups.map(g => `
-      <div>
-        <div class="group-title">${escHtml(g)}</div>
+    content.innerHTML = hero + groups.map(g => `
+      <section class="live-section">
+        <div class="section-heading"><h3>${escHtml(g)}</h3><span>${grouped[g].length} canales</span></div>
         <div class="channel-grid">${grouped[g].map(ch => cardHtml(ch)).join('')}</div>
-      </div>`).join('');
+      </section>`).join('');
   } else if (view.type === 'favorites') {
-    content.innerHTML = `<div class="group-title">Favoritos</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
+    content.innerHTML = `${hero}<section class="live-section"><div class="section-heading"><h3>Favoritos</h3><span>${channels.length} canales</span></div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div></section>`;
   } else if (view.type === 'subgroup') {
-    content.innerHTML = `<div class="group-title">${escHtml(view.group)} / ${escHtml(view.subgroup)}</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
+    content.innerHTML = `${hero}<section class="live-section"><div class="section-heading"><h3>${escHtml(view.group)} / ${escHtml(view.subgroup)}</h3><span>${channels.length} canales</span></div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div></section>`;
   } else {
-    content.innerHTML = `<div class="group-title">${escHtml(view.group)}</div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div>`;
+    content.innerHTML = `${hero}<section class="live-section"><div class="section-heading"><h3>${escHtml(view.group)}</h3><span>${channels.length} canales</span></div><div class="channel-grid">${channels.map(ch => cardHtml(ch)).join('')}</div></section>`;
   }
+}
+
+function liveHeroHtml(view, channels) {
+  const title = liveViewTitle(view);
+  const subtitle = liveViewSubtitle(view, channels);
+  const sampleChannels = channels.slice(0, 4);
+  const chips = liveGroupChipsHtml();
+  const preview = sampleChannels.length
+    ? `<div class="live-hero-preview">${sampleChannels.map(livePreviewHtml).join('')}</div>`
+    : '';
+  return `<section class="live-hero">
+    <div class="live-hero-copy">
+      <div class="vod-kicker">Directo</div>
+      <h2>${escHtml(title)}</h2>
+      <p class="vod-overview">${escHtml(subtitle)}</p>
+      ${chips}
+    </div>
+    ${preview}
+  </section>`;
+}
+
+function liveViewTitle(view) {
+  if (view.type === 'favorites') return 'Tus canales guardados';
+  if (view.type === 'all') return 'Todos los directos';
+  if (view.type === 'search') return 'Buscar directos';
+  if (view.type === 'subgroup') return view.subgroup;
+  return view.group || 'Directos';
+}
+
+function liveViewSubtitle(view, channels) {
+  const count = channels.length;
+  if (view.type === 'favorites') return count ? `${count} canales listos para abrir en directo.` : 'Marca canales como favoritos para tenerlos siempre arriba.';
+  if (view.type === 'search') return `${count} coincidencias encontradas en la lista actual de canales.`;
+  if (view.type === 'subgroup') return `${count} canales dentro de ${view.group}, manteniendo la clasificación actual.`;
+  if (view.type === 'group') return `${count} canales en esta categoría. Usa los subgrupos para afinar la lista.`;
+  return `${allChannels.length} canales disponibles, organizados por categorías y subgrupos.`;
+}
+
+function liveGroupChipsHtml() {
+  const groups = Object.keys(grouped).slice(0, 8);
+  if (!groups.length) return '';
+  return `<div class="live-chip-row">${groups.map(group => `<button class="live-chip" type="button" onclick="selectView('group', ${jsArg(group)}, null)">${escHtml(group)}</button>`).join('')}</div>`;
+}
+
+function livePreviewHtml(ch) {
+  const logo = ch.logo
+    ? `<img src="${escHtml(ch.logo)}" alt="" onerror="this.style.display='none'">`
+    : '<span>TV</span>';
+  return `<button class="live-preview-card" type="button" onclick="playChannel(${jsArg(ch)})">
+    ${logo}
+    <span>${escHtml(ch.name)}</span>
+  </button>`;
 }
 
 function cardHtml(ch) {
@@ -240,7 +341,11 @@ function onSearch(q) {
   document.getElementById('channel-count').textContent = `${filtered.length} canales`;
   if (!q) { renderCurrentView(); return; }
   const content = document.getElementById('content');
-  content.innerHTML = `<div class="group-title">Resultados: "${escHtml(q)}"</div><div class="channel-grid">${filtered.map(ch => cardHtml(ch)).join('')}</div>`;
+  content.innerHTML = `${liveHeroHtml({ type: 'search', group: null, subgroup: null }, filtered)}
+    <section class="live-section">
+      <div class="section-heading"><h3>Resultados: "${escHtml(q)}"</h3><span>${filtered.length} canales</span></div>
+      <div class="channel-grid">${filtered.map(ch => cardHtml(ch)).join('')}</div>
+    </section>`;
 }
 
 async function searchVod(q) {

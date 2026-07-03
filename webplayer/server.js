@@ -8,6 +8,7 @@ const app = express();
 const PROXY_HOST = process.env.PROXY_HOST || 'httproxy';
 const PROXY_PORT = process.env.PROXY_PORT || '8888';
 const HLS_DIR = '/tmp/hls';
+const WEBPLAYER_PORT = Number(process.env.PORT || 8890);
 const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL || 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL || 'https://image.tmdb.org/t/p';
 const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN || '';
@@ -548,15 +549,15 @@ function getLicensedPlaybackOptions(item, selection = {}) {
     request: buildPlaybackRequest(item, selection),
     providers: embedUrl ? [{
       id: 'vod-api',
-      name: 'Reproducir',
+      name: 'Volver a cargar',
       type: 'embed',
       url: embedUrl,
       embed_url: embedUrl,
       stream_url: null
     }] : [],
     message: embedUrl
-      ? 'Reproductor VOD legal disponible.'
-      : 'No se pudo construir la URL de reproducción VOD.'
+      ? ''
+      : 'No se pudo obetener el contenido.'
   };
 }
 
@@ -736,4 +737,4 @@ function orderSubgrouped(subgrouped) {
   return ordered;
 }
 
-app.listen(8890, () => console.log('Webplayer on :8890'));
+app.listen(WEBPLAYER_PORT, () => console.log(`Webplayer on :${WEBPLAYER_PORT}`));
