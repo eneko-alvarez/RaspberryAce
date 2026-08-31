@@ -12,8 +12,6 @@ let streamLoadStartedAt = 0;
 let activeChannel = null;
 let userClosedPlayer = false;
 let reconnectTimer = null;
-let lastPlaybackTime = 0;
-let lastPlaybackProgressAt = 0;
 let appMode = 'live';
 let vodLoaded = false;
 let vodHomeSections = [];
@@ -25,7 +23,6 @@ const streamLoaderEl = document.getElementById('stream-loader');
 const streamErrorEl = document.getElementById('stream-error');
 const FAVORITES_KEY = 'raspberryace:favorites:v1';
 const VOD_CONTINUE_KEY = 'raspberryace:vod-continue:v1';
-const STREAM_STALL_TIMEOUT_MS = 20000;
 const STREAM_RECONNECT_DELAY_MS = 1000;
 let favoriteKeys = loadFavoriteKeys();
 
@@ -523,7 +520,6 @@ function playChannel(chJson, options = {}) {
   hideStreamError();
   showStreamLoader();
   startLiveStateTimer();
-  resetPlaybackWatchdog();
   showPlayerControls();
 
   if (Hls.isSupported()) {
@@ -719,26 +715,11 @@ function clearReconnectTimer() {
   reconnectTimer = null;
 }
 
-function resetPlaybackWatchdog() {
-  lastPlaybackTime = videoEl.currentTime || 0;
-  lastPlaybackProgressAt = Date.now();
-}
-
 function monitorLivePlayback() {
   updateLiveState();
   if (userClosedPlayer || !activeChannel || reconnectTimer) return;
 
   if (videoEl.paused && !videoEl.ended) ensureVideoPlaying();
-
-  if (Math.abs(videoEl.currentTime - lastPlaybackTime) > 0.05) {
-    lastPlaybackTime = videoEl.currentTime;
-    lastPlaybackProgressAt = Date.now();
-    return;
-  }
-
-  if (Date.now() - lastPlaybackProgressAt >= STREAM_STALL_TIMEOUT_MS) {
-    scheduleActiveChannelReload('el vídeo lleva 20 segundos sin avanzar');
-  }
 }
 
 function ensureVideoPlaying() {
@@ -765,7 +746,7 @@ videoEl.addEventListener('volumechange', updateMuteButton);
 videoEl.addEventListener('loadedmetadata', () => updateStreamLoader(68));
 videoEl.addEventListener('canplay', () => updateStreamLoader(95));
 videoEl.addEventListener('playing', () => {
-  resetPlaybackWatchdog();
+  clearReconnectTimer();
   hideStreamLoader();
 });
 videoEl.addEventListener('pause', ensureVideoPlaying);
