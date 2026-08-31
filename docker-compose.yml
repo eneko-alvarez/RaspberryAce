@@ -48,10 +48,8 @@ services:
       # AIO Plugin Filter - Which plugins to include in the AIO unified playlist
       # Options: 'all' (default, includes all enabled plugins), 'newera,elcano', etc.
       - AIO_PLUGINS=all
-      # Fuente pública alternativa: devuelve canales AceStream activos en M3U.
-      # Indicamos el motor interno para que los enlaces generados sean válidos
-      # dentro de la red Docker.
-      - NEWERA_PLAYLIST_URL=https://search-ace.stream/playlist?engine_ip=aceserve&engine_port=6878
+      # NewEra migró a esta IPNS; la anterior fue retirada.
+      - NEWERA_PLAYLIST_URL=https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/
       # - ELCANO_PLAYLIST_URL=https://your-custom-url/playlist.m3u
     depends_on:
       aceserve:
