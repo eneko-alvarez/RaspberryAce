@@ -49,7 +49,7 @@ services:
       # Options: 'all' (default, includes all enabled plugins), 'newera,elcano', etc.
       - AIO_PLUGINS=all
       # NewEra migró a esta IPNS; la anterior fue retirada.
-      - NEWERA_PLAYLIST_URL=https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/lista_iptv.m3u
+      - NEWERA_PLAYLIST_URL=https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/
       # - ELCANO_PLAYLIST_URL=https://your-custom-url/playlist.m3u
     depends_on:
       aceserve:

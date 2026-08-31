@@ -12,6 +12,7 @@ let streamLoadStartedAt = 0;
 let activeChannel = null;
 let userClosedPlayer = false;
 let reconnectTimer = null;
+let reconnectAttempt = 0;
 let appMode = 'live';
 let vodLoaded = false;
 let vodHomeSections = [];
@@ -498,12 +499,15 @@ function toggleFavorite(event, chJson) {
 function playChannel(chJson, options = {}) {
   const ch = chJson;
   clearReconnectTimer();
+  if (!options.reconnecting) reconnectAttempt = 0;
   activeChannel = ch;
   userClosedPlayer = false;
   const overlay = document.getElementById('player-overlay');
   overlay.classList.add('open');
   document.getElementById('player-title').textContent = ch.name;
-  document.getElementById('player-status').textContent = '⏳ Iniciando…';
+  document.getElementById('player-status').textContent = options.reconnecting
+    ? `⚠ Error de reproducción · reintento ${reconnectAttempt}…`
+    : '⏳ Iniciando…';
   const logoEl = document.getElementById('player-logo');
   if (ch.logo) { logoEl.src = ch.logo; logoEl.style.display = ''; }
   else logoEl.style.display = 'none';
@@ -554,6 +558,7 @@ function playChannel(chJson, options = {}) {
 function closePlayer() {
   userClosedPlayer = true;
   activeChannel = null;
+  reconnectAttempt = 0;
   clearReconnectTimer();
   document.getElementById('player-overlay').classList.remove('open');
   if (hls) { hls.destroy(); hls = null; }
@@ -696,7 +701,8 @@ function reloadActiveChannel() {
 function scheduleActiveChannelReload(reason) {
   if (userClosedPlayer || !activeChannel) return;
   if (reconnectTimer) return;
-  document.getElementById('player-status').textContent = '⏳ Reconectando...';
+  reconnectAttempt += 1;
+  document.getElementById('player-status').textContent = `⚠ Error de reproducción · reintento ${reconnectAttempt}…`;
   hideStreamError();
   showStreamLoader();
   const channel = activeChannel;
@@ -747,6 +753,8 @@ videoEl.addEventListener('loadedmetadata', () => updateStreamLoader(68));
 videoEl.addEventListener('canplay', () => updateStreamLoader(95));
 videoEl.addEventListener('playing', () => {
   clearReconnectTimer();
+  reconnectAttempt = 0;
+  document.getElementById('player-status').textContent = '● En directo';
   hideStreamLoader();
 });
 videoEl.addEventListener('pause', ensureVideoPlaying);
