@@ -132,10 +132,14 @@ const GENERIC_SUBGROUPS = new Set([
 
 app.use(express.json());
 
-if (!fs.existsSync(HLS_DIR)) fs.mkdirSync(HLS_DIR, { recursive: true });
+// HLS output is disposable. Never reuse playlists left by a previous process or
+// container run: ffmpeg could otherwise expose old segments as live content.
+fs.rmSync(HLS_DIR, { recursive: true, force: true });
+fs.mkdirSync(HLS_DIR, { recursive: true });
 
 const activeStreams = {};
 const tmdbCache = new Map();
+let streamGeneration = 0;
 
 setInterval(() => {
   const now = Date.now();
@@ -144,7 +148,7 @@ setInterval(() => {
       console.log(`Stopping idle stream: ${id}`);
       stream.process.kill();
       fs.rmSync(stream.dir, { recursive: true, force: true });
-      delete activeStreams[id];
+      if (activeStreams[id] === stream) delete activeStreams[id];
     }
   }
 }, 30000);
@@ -381,13 +385,20 @@ app.get('/stream/:channelId/index.m3u8', (req, res) => {
   if (activeStreams[channelId]) {
     activeStreams[channelId].lastAccess = Date.now();
     waitForFile(playlistPath, 15000)
-      .then(() => res.sendFile(playlistPath))
+      .then(() => sendLiveFile(res, playlistPath))
       .catch(() => res.status(504).send('Stream timeout'));
     return;
   }
 
+  // A stopped or failed ffmpeg process may have left a valid-looking manifest.
+  // Remove it before starting so waitForFile cannot return stale content.
+  fs.rmSync(streamDir, { recursive: true, force: true });
   fs.mkdirSync(streamDir, { recursive: true });
   console.log(`Starting stream: ${channelUrl}`);
+
+  // A unique prefix prevents clients from matching a new segment with a cached
+  // segment URL from an earlier run of the same channel.
+  const generation = `${Date.now()}-${++streamGeneration}`;
 
   const ffmpeg = spawn('ffmpeg', [
     '-re', '-i', channelUrl,
@@ -395,28 +406,33 @@ app.get('/stream/:channelId/index.m3u8', (req, res) => {
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '5',
-    '-hls_flags', 'delete_segments+append_list',
-    '-hls_segment_filename', path.join(streamDir, 'seg%03d.ts'),
+    '-hls_flags', 'delete_segments+omit_endlist+temp_file',
+    '-hls_segment_filename', path.join(streamDir, `${generation}-seg%06d.ts`),
     playlistPath
   ]);
+
+  const stream = { process: ffmpeg, lastAccess: Date.now(), dir: streamDir };
+  activeStreams[channelId] = stream;
 
   ffmpeg.stderr.on('data', d => process.stdout.write(d));
   ffmpeg.on('exit', code => {
     console.log(`ffmpeg exit (${code}) for ${channelId}`);
-    delete activeStreams[channelId];
+    // Do not let a delayed exit event remove a newer stream for this channel.
+    if (activeStreams[channelId] === stream) {
+      delete activeStreams[channelId];
+      fs.rmSync(streamDir, { recursive: true, force: true });
+    }
   });
 
-  activeStreams[channelId] = { process: ffmpeg, lastAccess: Date.now(), dir: streamDir };
-
   waitForFile(playlistPath, 15000)
-    .then(() => res.sendFile(playlistPath))
+    .then(() => sendLiveFile(res, playlistPath))
     .catch(() => res.status(504).send('Stream timeout'));
 });
 
 app.get('/stream/:channelId/:segment', (req, res) => {
   const { channelId, segment } = req.params;
   if (activeStreams[channelId]) activeStreams[channelId].lastAccess = Date.now();
-  res.sendFile(path.join(HLS_DIR, channelId, segment));
+  sendLiveFile(res, path.join(HLS_DIR, channelId, segment));
 });
 
 app.get('/vod/:mediaType/:id', (req, res) => {
@@ -424,6 +440,16 @@ app.get('/vod/:mediaType/:id', (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+function sendLiveFile(res, filePath) {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'Surrogate-Control': 'no-store'
+  });
+  res.sendFile(filePath);
+}
 
 function waitForFile(filePath, timeout) {
   return new Promise((resolve, reject) => {

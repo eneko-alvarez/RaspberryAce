@@ -11,6 +11,9 @@ let streamLoadProgress = 0;
 let streamLoadStartedAt = 0;
 let activeChannel = null;
 let userClosedPlayer = false;
+let reconnectTimer = null;
+let lastPlaybackTime = 0;
+let lastPlaybackProgressAt = 0;
 let appMode = 'live';
 let vodLoaded = false;
 let vodHomeSections = [];
@@ -22,6 +25,8 @@ const streamLoaderEl = document.getElementById('stream-loader');
 const streamErrorEl = document.getElementById('stream-error');
 const FAVORITES_KEY = 'raspberryace:favorites:v1';
 const VOD_CONTINUE_KEY = 'raspberryace:vod-continue:v1';
+const STREAM_STALL_TIMEOUT_MS = 20000;
+const STREAM_RECONNECT_DELAY_MS = 1000;
 let favoriteKeys = loadFavoriteKeys();
 
 function toggleSidebar() { sidebarEl.classList.toggle('open'); }
@@ -493,8 +498,9 @@ function toggleFavorite(event, chJson) {
   renderCurrentView();
 }
 
-function playChannel(chJson) {
+function playChannel(chJson, options = {}) {
   const ch = chJson;
+  clearReconnectTimer();
   activeChannel = ch;
   userClosedPlayer = false;
   const overlay = document.getElementById('player-overlay');
@@ -506,49 +512,53 @@ function playChannel(chJson) {
   else logoEl.style.display = 'none';
 
   const hlsUrl = `/stream/${encodeURIComponent(ch.streamId)}/index.m3u8`;
-  if (hls) { hls.destroy(); hls = null; }
+  if (hls) {
+    const previousHls = hls;
+    hls = null;
+    previousHls.destroy();
+  }
   videoEl.removeAttribute('controls');
-  videoEl.muted = false;
+  if (!options.reconnecting) videoEl.muted = false;
   updateMuteButton();
   hideStreamError();
   showStreamLoader();
   startLiveStateTimer();
+  resetPlaybackWatchdog();
   showPlayerControls();
 
   if (Hls.isSupported()) {
-    hls = new Hls({ lowLatencyMode: true });
-    hls.on(Hls.Events.MANIFEST_LOADING, () => updateStreamLoader(20));
-    hls.on(Hls.Events.MANIFEST_LOADED, () => updateStreamLoader(45));
-    hls.on(Hls.Events.FRAG_LOADING, () => updateStreamLoader(72));
-    hls.on(Hls.Events.FRAG_LOADED, () => updateStreamLoader(84));
-    hls.on(Hls.Events.FRAG_BUFFERED, () => updateStreamLoader(92));
-    hls.loadSource(hlsUrl);
-    hls.attachMedia(videoEl);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    const hlsInstance = new Hls({ lowLatencyMode: true });
+    hls = hlsInstance;
+    hlsInstance.on(Hls.Events.MANIFEST_LOADING, () => updateStreamLoader(20));
+    hlsInstance.on(Hls.Events.MANIFEST_LOADED, () => updateStreamLoader(45));
+    hlsInstance.on(Hls.Events.FRAG_LOADING, () => updateStreamLoader(72));
+    hlsInstance.on(Hls.Events.FRAG_LOADED, () => updateStreamLoader(84));
+    hlsInstance.on(Hls.Events.FRAG_BUFFERED, () => updateStreamLoader(92));
+    hlsInstance.loadSource(hlsUrl);
+    hlsInstance.attachMedia(videoEl);
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (hls !== hlsInstance) return;
       updateStreamLoader(65);
       goLive();
-      videoEl.play();
+      ensureVideoPlaying();
       document.getElementById('player-status').textContent = '● En directo';
     });
-    hls.on(Hls.Events.ERROR, (_, d) => {
-      if (!activeChannel || activeChannel.streamId !== ch.streamId) return;
-      if (d.fatal) {
-        hideStreamLoader(true);
-        showStreamError('El canal no ha respondido o no se ha podido abrir el manifiesto.');
-        document.getElementById('player-status').textContent = '❌ ' + d.details;
-      }
+    hlsInstance.on(Hls.Events.ERROR, (_, d) => {
+      if (hls !== hlsInstance || !activeChannel || activeChannel.streamId !== ch.streamId) return;
+      if (d.fatal) scheduleActiveChannelReload(d.details || d.type || 'error HLS');
     });
   } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
     updateStreamLoader(20);
     videoEl.src = hlsUrl;
     goLive();
-    videoEl.play();
+    ensureVideoPlaying();
   }
 }
 
 function closePlayer() {
   userClosedPlayer = true;
   activeChannel = null;
+  clearReconnectTimer();
   document.getElementById('player-overlay').classList.remove('open');
   if (hls) { hls.destroy(); hls = null; }
   stopLiveStateTimer();
@@ -573,7 +583,7 @@ function goLive() {
   const edge = liveEdge();
   if (edge === null) return;
   videoEl.currentTime = Math.max(0, edge - 0.5);
-  videoEl.play();
+  ensureVideoPlaying();
   updateLiveState();
   showPlayerControls();
 }
@@ -595,7 +605,7 @@ function updateLiveState() {
 function startLiveStateTimer() {
   stopLiveStateTimer();
   updateLiveState();
-  liveStateTimer = setInterval(updateLiveState, 1000);
+  liveStateTimer = setInterval(monitorLivePlayback, 1000);
 }
 
 function stopLiveStateTimer() {
@@ -684,14 +694,57 @@ function hideStreamError() {
 }
 
 function reloadActiveChannel() {
+  scheduleActiveChannelReload('el directo ha finalizado');
+}
+
+function scheduleActiveChannelReload(reason) {
   if (userClosedPlayer || !activeChannel) return;
+  if (reconnectTimer) return;
   document.getElementById('player-status').textContent = '⏳ Reconectando...';
   hideStreamError();
   showStreamLoader();
   const channel = activeChannel;
-  setTimeout(() => {
-    if (!userClosedPlayer && activeChannel) playChannel(channel);
-  }, 600);
+  console.warn(`Recargando ${channel.name}: ${reason}`);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (!userClosedPlayer && activeChannel?.streamId === channel.streamId) {
+      playChannel(channel, { reconnecting: true });
+    }
+  }, STREAM_RECONNECT_DELAY_MS);
+}
+
+function clearReconnectTimer() {
+  if (!reconnectTimer) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+}
+
+function resetPlaybackWatchdog() {
+  lastPlaybackTime = videoEl.currentTime || 0;
+  lastPlaybackProgressAt = Date.now();
+}
+
+function monitorLivePlayback() {
+  updateLiveState();
+  if (userClosedPlayer || !activeChannel || reconnectTimer) return;
+
+  if (videoEl.paused && !videoEl.ended) ensureVideoPlaying();
+
+  if (Math.abs(videoEl.currentTime - lastPlaybackTime) > 0.05) {
+    lastPlaybackTime = videoEl.currentTime;
+    lastPlaybackProgressAt = Date.now();
+    return;
+  }
+
+  if (Date.now() - lastPlaybackProgressAt >= STREAM_STALL_TIMEOUT_MS) {
+    scheduleActiveChannelReload('el vídeo lleva 20 segundos sin avanzar');
+  }
+}
+
+function ensureVideoPlaying() {
+  if (userClosedPlayer || !activeChannel || !videoEl.paused) return;
+  const playPromise = videoEl.play();
+  if (playPromise) playPromise.catch(() => {});
 }
 
 document.getElementById('player-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closePlayer(); });
@@ -701,17 +754,25 @@ document.addEventListener('keydown', e => {
 });
 playerShellEl.addEventListener('mousemove', showPlayerControls);
 playerShellEl.addEventListener('touchstart', showPlayerControls, { passive: true });
-playerShellEl.addEventListener('click', showPlayerControls);
+videoEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+videoEl.addEventListener('click', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  ensureVideoPlaying();
+});
 videoEl.addEventListener('timeupdate', updateLiveState);
 videoEl.addEventListener('volumechange', updateMuteButton);
 videoEl.addEventListener('loadedmetadata', () => updateStreamLoader(68));
 videoEl.addEventListener('canplay', () => updateStreamLoader(95));
-videoEl.addEventListener('playing', () => hideStreamLoader());
+videoEl.addEventListener('playing', () => {
+  resetPlaybackWatchdog();
+  hideStreamLoader();
+});
+videoEl.addEventListener('pause', ensureVideoPlaying);
 videoEl.addEventListener('ended', reloadActiveChannel);
 videoEl.addEventListener('error', () => {
   if (!activeChannel) return;
-  hideStreamLoader(true);
-  showStreamError('El reproductor no ha podido abrir este directo.');
+  scheduleActiveChannelReload(videoEl.error?.message || 'error del reproductor');
 });
 videoEl.addEventListener('waiting', () => {
   if (!streamLoaderEl.hidden) updateStreamLoader(streamLoadProgress);
